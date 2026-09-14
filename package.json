@@ -1,0 +1,38 @@
+{
+  "name": "wayfarer-draft-list-enhancement",
+  "version": "1.0.0",
+  "description": "Development environment for the Wayfarer Draft List Enhancement userscript",
+  "private": true,
+  "main": "dist/wayfarer-draft-list-enhancement.user.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wiinuk/wayfarer-draft-list-enhancement.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/wiinuk/wayfarer-draft-list-enhancement/issues"
+  },
+  "homepage": "https://github.com/wiinuk/wayfarer-draft-list-enhancement#readme",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.10.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.6",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.70.0",
+    "vite": "^8.3.0",
+    "vite-plugin-monkey": "^8.1.1"
+  }
+}
