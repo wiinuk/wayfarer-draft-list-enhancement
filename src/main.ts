@@ -16,21 +16,19 @@ const autoSaveStorageKey = "wayfarer-draft-auto-save";
 
 const draftMap: Map<string, PoiItem> = new Map();
 
-let draftFilterState: "all" | "ready" | "not-ready" = "all";
-
 let locationAttestedFilterState: "all" | "attested" | "not-attested" = "all";
 
 const draftStateStorageKey = "wayfarer-draft-list-state";
 const draftStateVersion = "3";
 
-type DraftListState = {
+type DraftListState = Readonly<{
   version: "3";
   filter: "all" | "ready" | "not-ready";
   locationAttestedFilter: "all" | "attested" | "not-attested";
   sortMode: "unsorted" | "distance" | "last-modified";
   latitude?: number;
   longitude?: number;
-};
+}>;
 
 let draftSortState: DraftListState = {
   version: draftStateVersion,
@@ -53,7 +51,6 @@ try {
   );
 
   if (savedState && savedState.version === draftStateVersion) {
-    draftFilterState = savedState.filter;
     locationAttestedFilterState = savedState.locationAttestedFilter || "all";
     draftSortState = savedState;
   }
@@ -410,8 +407,8 @@ function applyDraftFilter() {
     );
 
     const readinessHide =
-      draftFilterState !== "all" &&
-      (draftFilterState === "ready") !== readiness;
+      draftSortState.filter !== "all" &&
+      (draftSortState.filter === "ready") !== readiness;
 
     const isAttested = Boolean(draft.locationAttested);
 
@@ -428,8 +425,8 @@ function applyDraftFilter() {
 }
 
 function getDraftFilterLabel() {
-  if (draftFilterState === "ready") return "準備完了";
-  if (draftFilterState === "not-ready") return "不可";
+  if (draftSortState.filter === "ready") return "準備完了";
+  if (draftSortState.filter === "not-ready") return "不可";
   return "すべて";
 }
 
@@ -489,14 +486,16 @@ function addSortButton() {
   }
 
   filterBtn.addEventListener("click", () => {
-    draftFilterState =
-      draftFilterState === "all"
-        ? "ready"
-        : draftFilterState === "ready"
-          ? "not-ready"
-          : "all";
+    draftSortState = {
+      ...draftSortState,
+      filter:
+        draftSortState.filter === "all"
+          ? "ready"
+          : draftSortState.filter === "ready"
+            ? "not-ready"
+            : "all",
+    };
 
-    draftSortState.filter = draftFilterState;
     saveDraftState();
 
     filterBtn.innerText = `提出: ${getDraftFilterLabel()}`;
@@ -512,7 +511,10 @@ function addSortButton() {
           ? "not-attested"
           : "all";
 
-    draftSortState.locationAttestedFilter = locationAttestedFilterState;
+    draftSortState = {
+      ...draftSortState,
+      locationAttestedFilter: locationAttestedFilterState,
+    };
 
     saveDraftState();
 
