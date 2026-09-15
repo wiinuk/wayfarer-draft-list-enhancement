@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wayfarer Draft List Enhancement
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.7
 // @description  Sort Niantic Wayfarer drafts using precise coordinates from API response
 // @match        https://wayfarer.scopely.com/*
 // @grant        none
