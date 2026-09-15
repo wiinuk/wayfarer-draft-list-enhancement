@@ -1,3 +1,4 @@
+import { hookApi } from "./api-hook";
 import { createAutoSaver } from "./auto-save";
 import { createDraftStateLoader } from "./draft-state-storage";
 import { DraftsResponse, PoiItem } from "./drafts-model";
@@ -19,6 +20,20 @@ const draftStateVersion = "3";
 
 const draftMap: Map<string, PoiItem> = new Map();
 
+function loadDraftCoordinates(data: DraftsResponse) {
+  if (data && data.result && Array.isArray(data.result.result)) {
+    data.result.result.forEach((item) => {
+      if (item.id) {
+        draftMap.set(item.id, item);
+      }
+    });
+
+    scheduleDraftStateApply();
+
+    console.log("[Wayfarer Draft Sorter] Drafts loaded:", draftMap);
+  }
+}
+
 const state = createDraftStateLoader(draftStateStorageKey, draftStateVersion, {
   version: draftStateVersion,
   filter: "all",
@@ -33,6 +48,10 @@ let observer: MutationObserver | null = null;
 const autoSaver = createAutoSaver({ autoSaveStorageKey, draftMap });
 
 let isActive = false;
+const apiHook = hookApi({
+  onDraftsReceived: loadDraftCoordinates,
+  isActive,
+});
 
 function formatDistance(distance: number) {
   return distance < 1
@@ -259,91 +278,6 @@ function sortDraftCards(
 
   return true;
 }
-
-// -------------------------------------------------------------------------
-// 6. APIから下書きを取得
-// -------------------------------------------------------------------------
-
-function loadDraftCoordinates(data: DraftsResponse) {
-  if (data && data.result && Array.isArray(data.result.result)) {
-    data.result.result.forEach((item) => {
-      if (item.id) {
-        draftMap.set(item.id, item);
-      }
-    });
-
-    scheduleDraftStateApply();
-
-    console.log("[Wayfarer Draft Sorter] Drafts loaded:", draftMap);
-  }
-}
-
-// fetchフック
-const originalFetch = window.fetch;
-
-window.fetch = async function (...args) {
-  const response = await originalFetch.apply(this, args);
-
-  if (!isActive) return response;
-
-  const url =
-    typeof args[0] === "string"
-      ? args[0]
-      : args[0] instanceof URL
-        ? String(args[0])
-        : args[0].url;
-
-  if (url && url.includes("/api/v1/vault/submit/get/drafts")) {
-    try {
-      const clone = response.clone();
-
-      const data: DraftsResponse = await clone.json();
-
-      loadDraftCoordinates(data);
-    } catch (e) {
-      console.error("[Wayfarer Draft Sorter] Error parsing API response:", e);
-    }
-  }
-
-  return response;
-};
-
-// XHRフック
-const xhrUrls: WeakMap<XMLHttpRequest, string> = new WeakMap();
-
-const originalXhrOpen = XMLHttpRequest.prototype.open;
-
-XMLHttpRequest.prototype.open = function (...args: never) {
-  xhrUrls.set(this, String(args[1]));
-  return originalXhrOpen.apply(this, args);
-};
-
-const originalXhrSend = XMLHttpRequest.prototype.send;
-
-XMLHttpRequest.prototype.send = function (...args: never) {
-  this.addEventListener("load", () => {
-    if (!isActive) return;
-
-    const url = xhrUrls.get(this);
-
-    if (!url || !url.includes("/api/v1/vault/submit/get/drafts")) {
-      return;
-    }
-
-    try {
-      const data =
-        this.responseType === "json"
-          ? this.response
-          : JSON.parse(this.responseText);
-
-      loadDraftCoordinates(data);
-    } catch (e) {
-      console.error("[Wayfarer Draft Sorter] Error parsing XHR response:", e);
-    }
-  });
-
-  return originalXhrSend.apply(this, args);
-};
 
 // -------------------------------------------------------------------------
 // 8. フィルター
@@ -579,6 +513,7 @@ function start() {
   if (isActive) return;
 
   isActive = true;
+  apiHook.setIsActive(isActive);
 
   injectStyles();
   addSortButton();
@@ -605,6 +540,7 @@ function stop() {
   if (!isActive) return;
 
   isActive = false;
+  apiHook.setIsActive(isActive);
 
   if (observer) {
     observer.disconnect();
