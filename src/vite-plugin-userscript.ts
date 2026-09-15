@@ -2,6 +2,7 @@
 
 import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import * as esbuild from "esbuild";
@@ -10,6 +11,8 @@ import type { Plugin, ResolvedConfig, ViteDevServer } from "vite";
 
 export interface UserscriptOptions {
   entry: string;
+  name?: string;
+  developmentOutput?: string;
   host?: string;
   port?: number;
   installPath?: string;
@@ -19,10 +22,52 @@ export interface UserscriptOptions {
 
 const reloadMessage = "reload";
 
+function changeExt(filePath: string, newExtWithDot: string) {
+  const parsed = path.parse(filePath);
+  return path.format({
+    ...parsed,
+    base: undefined,
+    ext: newExtWithDot,
+  });
+}
+
+function removeAllExtensions(filePath: string): string {
+  let currentPath = filePath;
+  let ext = path.extname(currentPath);
+
+  while (ext !== "") {
+    currentPath = currentPath.slice(0, -ext.length);
+    ext = path.extname(currentPath);
+  }
+
+  return currentPath;
+}
+
+function toValidLibName(input: string): string {
+  const cleaned = input.replace(/[^a-zA-Z0-9_$]/g, " ");
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length === 0) {
+    return "AppLibrary";
+  }
+
+  let pascalCaseName = words
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join("");
+
+  if (/^[0-9]/.test(pascalCaseName)) {
+    pascalCaseName = `_${pascalCaseName}`;
+  }
+
+  return pascalCaseName;
+}
+
 export function userscript(options: UserscriptOptions): Plugin {
-  const scriptBaseName = "wayfarer-draft-list-enhancement";
-  const scriptFileName = `${scriptBaseName}.user.js`;
-  const installPath = `/__userscript__/${scriptFileName}`;
+  const entryFileName = path.basename(options.entry);
+  const outputFileName = changeExt(entryFileName, ".js");
+  const developmentOutput = path.join(
+    options.developmentOutput ?? "dev",
+    changeExt(entryFileName, ".debug.js"),
+  );
 
   let config: ResolvedConfig;
   let entryPath: string;
@@ -33,7 +78,8 @@ export function userscript(options: UserscriptOptions): Plugin {
 
   const host = options.host ?? process.env.WS_HOST ?? "127.0.0.1";
   const port = options.port ?? Number(process.env.WS_PORT ?? 35729);
-  const installUrlPath = options.installPath ?? installPath;
+  const installUrlPath =
+    options.installPath ?? `/__userscript__/${outputFileName}`;
 
   return {
     name: "userscript",
@@ -43,9 +89,11 @@ export function userscript(options: UserscriptOptions): Plugin {
         build: {
           lib: {
             entry: options.entry,
-            name: "WayfarerDraftListEnhancement",
+            name:
+              options.name ??
+              toValidLibName(removeAllExtensions(entryFileName)),
             formats: ["iife"],
-            fileName: () => "wayfarer-draft-list-enhancement.user.js",
+            fileName: outputFileName,
           },
         },
       };
@@ -55,13 +103,14 @@ export function userscript(options: UserscriptOptions): Plugin {
       config = resolvedConfig;
       development = resolvedConfig.command === "serve";
       entryPath = path.resolve(config.root, options.entry);
+      readUserscriptHeader(entryPath);
       outputPath = path.resolve(
         config.root,
         development
-          ? "dev/wayfarer-draft-list-enhancement.debug.js"
+          ? developmentOutput
           : path.join(
               options.output ?? path.dirname(entryPath),
-              scriptFileName,
+              outputFileName,
             ),
       );
     },
@@ -92,7 +141,7 @@ export function userscript(options: UserscriptOptions): Plugin {
       server.middlewares.use(installUrlPath, (_request, response) => {
         response.setHeader("Content-Type", "application/javascript");
         response.end(
-          `${createUserscriptMetadata(pathToFileURL(outputPath).href)}\n`,
+          `${addRequire(readUserscriptHeader(entryPath), pathToFileURL(outputPath).href)}\n`,
         );
       });
 
@@ -141,16 +190,24 @@ export function userscript(options: UserscriptOptions): Plugin {
   };
 }
 
-function createUserscriptMetadata(requireUrl?: string): string {
-  const requireLine = requireUrl ? `// @require      ${requireUrl}\n` : "";
-  return `// ==UserScript==
-// @name         Wayfarer Draft List Enhancement
-// @namespace    http://tampermonkey.net/
-// @version      1.6.0
-// @description  Sort Niantic Wayfarer drafts using precise coordinates from API response
-// @match        https://wayfarer.scopely.com/*
-// @grant        none
-${requireLine}// ==/UserScript==`;
+function readUserscriptHeader(entryPath: string): string {
+  const source = readFileSync(entryPath, "utf8");
+  const match = source.match(
+    /^(\uFEFF?\/\/ ==UserScript==\r?\n[\s\S]*?\r?\n\/\/ ==\/UserScript==)(?:\r?\n|$)/,
+  );
+  if (!match) {
+    throw new Error(
+      `[userscript] entry does not contain a UserScript header: ${entryPath}`,
+    );
+  }
+  return match[1];
+}
+
+function addRequire(header: string, requireUrl: string): string {
+  return header.replace(
+    /(\r?\n)(\/\/ ==\/UserScript==)$/,
+    `$1// @require      ${requireUrl}$1$2`,
+  );
 }
 
 async function buildUserscript(
@@ -167,7 +224,9 @@ async function buildUserscript(
     format: "iife",
     outfile: outputPath,
     platform: "browser",
-    banner: { js: `${createUserscriptMetadata()}\n` },
+    banner: {
+      js: `${readUserscriptHeader(entryPath)}\n`,
+    },
     sourcemap: includeReloadClient ? "inline" : false,
     ...(includeReloadClient
       ? { footer: { js: createReloadClient(host, port) } }
