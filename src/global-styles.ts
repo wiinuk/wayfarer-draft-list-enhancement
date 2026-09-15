@@ -7,6 +7,9 @@ export const classNames = Object.freeze({
   btnLocation: `${classNamePrefix}-btn-location`,
   btnAutoSave: `${classNamePrefix}-btn-auto-save`,
   btnAutoSaveProcessing: `${classNamePrefix}-btn-auto-save-processing`,
+  searchContainer: `${classNamePrefix}-search-container`,
+  searchInput: `${classNamePrefix}-search-input`,
+  searchClear: `${classNamePrefix}-search-clear`,
   locationBadge: `${classNamePrefix}-location-attested-badge`,
   locationAttested: `${classNamePrefix}-location-attested`,
   distanceBadge: `${classNamePrefix}-distance-badge`,
@@ -36,6 +39,45 @@ const globalStyles = `
 
         .${classNames.btnLocation} {
             background-color: #388e3c;
+        }
+
+        .${classNames.searchContainer} {
+            position: relative;
+            display: inline-block;
+            margin-left: 8px;
+            width: stretch;
+            vertical-align: middle;
+        }
+
+        .${classNames.searchInput} {
+            box-sizing: border-box;
+            padding: 5px 32px 5px 8px;
+            width: 100%;
+            border: 1px solid #c7c7c7;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: normal;
+        }
+
+        .${classNames.searchClear} {
+            position: absolute;
+            top: 50%;
+            right: 6px;
+            display: none;
+            padding: 0;
+            width: 20px;
+            height: 20px;
+            transform: translateY(-50%);
+            cursor: pointer;
+            color: #666;
+            background: transparent;
+            border: 0;
+            font-size: 18px;
+            line-height: 20px;
+        }
+
+        .${classNames.searchClear}:hover {
+            color: #111;
         }
 
         /* 位置認証ボタン */

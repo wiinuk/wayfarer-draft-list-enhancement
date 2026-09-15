@@ -90,6 +90,7 @@ function start() {
 
   injectStyles();
   draftsMod.addSortButton();
+  draftsMod.addSearchInput();
   autoSaveMod.addButtons();
 
   if (!observer) {
@@ -98,8 +99,9 @@ function start() {
 
       injectStyles();
       draftsMod.addSortButton();
-      scheduleDraftStateApply();
+      draftsMod.addSearchInput();
       autoSaveMod.addButtons();
+      scheduleDraftStateApply();
     });
   }
 

@@ -1,6 +1,6 @@
 import { DraftState } from "./draft-state-storage";
 import { PoiItem } from "./drafts-model";
-import { getDistance } from "./geometry";
+import { getDistance, parseCoordinate } from "./geometry";
 import { classNames } from "./global-styles";
 import { getDraftIdForCard } from "./ng-context";
 
@@ -14,8 +14,12 @@ interface CreateDraftsModOptions {
   readonly state: DraftState;
   readonly draftMap: ReadonlyMap<string, PoiItem>;
 }
+
+const searchRadiusKm = 0.08;
+
 export function createDraftsMod({ state, draftMap }: CreateDraftsModOptions) {
   let locationCheckInProgress = false;
+  let searchApplyTimer: number | null = null;
   function checkCurrentLocation(sortButton: HTMLButtonElement) {
     if (
       state.value.sortMode !== "distance" ||
@@ -315,6 +319,73 @@ export function createDraftsMod({ state, draftMap }: CreateDraftsModOptions) {
       );
     });
   }
+  function addSearchInput() {
+    if (document.getElementById("search-drafts-input")) return;
+
+    const draftHeader = document.querySelector(".drafts-title");
+    if (!draftHeader) return;
+
+    const searchContainer = document.createElement("span");
+    searchContainer.className = classNames.searchContainer;
+
+    const searchInput = document.createElement("input");
+    searchInput.id = "search-drafts-input";
+    searchInput.className = classNames.searchInput;
+    searchInput.type = "search";
+    searchInput.placeholder = "座標で検索 (例: 35.65861, 139.74556)";
+    searchInput.setAttribute("aria-label", "座標で下書きを検索");
+    searchInput.value = state.value.query ?? "";
+
+    const clearButton = document.createElement("button");
+    clearButton.type = "button";
+    clearButton.className = classNames.searchClear;
+    clearButton.innerText = "×";
+    clearButton.setAttribute("aria-label", "検索条件をクリア");
+
+    const updateClearButton = () => {
+      clearButton.style.display = searchInput.value ? "block" : "none";
+    };
+
+    searchInput.addEventListener("input", () => {
+      updateClearButton();
+      if (searchApplyTimer !== null) {
+        window.clearTimeout(searchApplyTimer);
+      }
+      searchApplyTimer = window.setTimeout(() => {
+        searchApplyTimer = null;
+        state.mapSave((currentState) => ({
+          ...currentState,
+          query: searchInput.value,
+        }));
+        applyDraftFilter();
+      }, 300);
+    });
+    clearButton.addEventListener("click", () => {
+      searchInput.value = "";
+      searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+      searchInput.focus();
+    });
+
+    updateClearButton();
+    searchContainer.append(searchInput, clearButton);
+    draftHeader.appendChild(searchContainer);
+  }
+  function isQueryHidden(draft: PoiItem) {
+    const query = state.value.query?.trim() ?? "";
+    if (!query) return false;
+
+    const coordinates = parseCoordinate(query);
+    if (!coordinates) return true;
+
+    return (
+      getDistance(
+        coordinates.latitude,
+        coordinates.longitude,
+        draft.lat,
+        draft.lng,
+      ) >= searchRadiusKm
+    );
+  }
 
   function applyDraftFilter() {
     (
@@ -326,33 +397,42 @@ export function createDraftsMod({ state, draftMap }: CreateDraftsModOptions) {
       const draft = draftId ? draftMap.get(draftId) : undefined;
       if (!draft) return;
 
-      const readiness = Boolean(
-        (draft.mainImageGcsPath || draft.mainImageServingUrl) &&
-        ((draft.supportingImageGcsPaths &&
-          draft.supportingImageGcsPaths.length > 0) ||
-          (draft.supportingImageServingUrls &&
-            draft.supportingImageServingUrls.length > 0)) &&
-        typeof draft.title === "string" &&
-        draft.title.trim().length > 0 &&
-        typeof draft.description === "string" &&
-        draft.description.trim().length > 0,
-      );
-
-      const readinessHide =
-        state.value.filter !== "all" &&
-        (state.value.filter === "ready") !== readiness;
-
-      const isAttested = Boolean(draft.locationAttested);
-      const locationAttestedHide =
-        state.value.locationAttestedFilter !== "all" &&
-        (state.value.locationAttestedFilter === "attested") !== isAttested;
-
-      const shouldHide = readinessHide || locationAttestedHide;
+      const shouldHide =
+        isLocationAttestedHidden(draft) ||
+        isReadinessHidden(draft) ||
+        isQueryHidden(draft);
 
       if (card.hidden !== shouldHide) {
         card.hidden = shouldHide;
       }
     });
+  }
+
+  function isReadinessHidden(draft: PoiItem) {
+    const readiness = Boolean(
+      (draft.mainImageGcsPath || draft.mainImageServingUrl) &&
+      ((draft.supportingImageGcsPaths &&
+        draft.supportingImageGcsPaths.length > 0) ||
+        (draft.supportingImageServingUrls &&
+          draft.supportingImageServingUrls.length > 0)) &&
+      typeof draft.title === "string" &&
+      draft.title.trim().length > 0 &&
+      typeof draft.description === "string" &&
+      draft.description.trim().length > 0,
+    );
+
+    const readinessHide =
+      state.value.filter !== "all" &&
+      (state.value.filter === "ready") !== readiness;
+    return readinessHide;
+  }
+
+  function isLocationAttestedHidden(draft: PoiItem) {
+    const isAttested = Boolean(draft.locationAttested);
+    const locationAttestedHide =
+      state.value.locationAttestedFilter !== "all" &&
+      (state.value.locationAttestedFilter === "attested") !== isAttested;
+    return locationAttestedHide;
   }
 
   function removeAddedUI() {
@@ -364,6 +444,12 @@ export function createDraftsMod({ state, draftMap }: CreateDraftsModOptions) {
       const el = document.getElementById(id);
       if (el) el.remove();
     });
+
+    document.querySelector(`.${classNames.searchContainer}`)?.remove();
+    if (searchApplyTimer !== null) {
+      window.clearTimeout(searchApplyTimer);
+      searchApplyTimer = null;
+    }
 
     document
       .querySelectorAll(
@@ -377,6 +463,7 @@ export function createDraftsMod({ state, draftMap }: CreateDraftsModOptions) {
     sortDraftCards,
     updateDraftCardBadges,
     addSortButton,
+    addSearchInput,
     applyDraftFilter,
     removeAddedUI,
   };

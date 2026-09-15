@@ -5,6 +5,7 @@ export type DraftListState = Readonly<{
   sortMode: "unsorted" | "distance" | "last-modified";
   latitude?: number;
   longitude?: number;
+  query?: string;
 }>;
 
 export type DraftState = ReturnType<typeof createDraftStateLoader>;
