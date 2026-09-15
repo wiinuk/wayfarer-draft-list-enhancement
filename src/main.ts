@@ -6,8 +6,6 @@ import { DraftsResponse, PoiItem } from "./drafts-model";
 import { injectStyles, removeStyles } from "./global-styles";
 import { startRouting } from "./routing";
 
-export {};
-
 const TARGET_PATH = "/new/submit";
 const EDIT_PATH = "/new/submit/new";
 const DRAFT_SUCCESS_PATH = "/new/submit/draft-success";
