@@ -1,6 +1,7 @@
+//spell-checker: words userscript
 import { defineConfig } from "vite";
-import { userscriptReload } from "./src/vite-plugin-userscript-reload.ts";
+import { userscript } from "./src/vite-plugin-userscript.ts";
 
 export default defineConfig({
-  plugins: [userscriptReload()],
+  plugins: [userscript()],
 });

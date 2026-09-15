@@ -8,7 +8,7 @@ import * as esbuild from "esbuild";
 import WebSocket, { WebSocketServer } from "ws";
 import type { Plugin, ResolvedConfig, ViteDevServer } from "vite";
 
-export interface UserscriptReloadOptions {
+export interface UserscriptOptions {
   entry?: string;
   host?: string;
   port?: number;
@@ -20,9 +20,7 @@ export interface UserscriptReloadOptions {
 const reloadMessage = "reload";
 const installPath = "/__userscript__/wayfarer-draft-list-enhancement.user.js";
 
-export function userscriptReload(
-  options: UserscriptReloadOptions = {},
-): Plugin {
+export function userscript(options: UserscriptOptions = {}): Plugin {
   let config: ResolvedConfig;
   let entryPath: string;
   let outputPath: string;
@@ -35,7 +33,7 @@ export function userscriptReload(
   const installUrlPath = options.installPath ?? installPath;
 
   return {
-    name: "userscript-reload",
+    name: "userscript",
 
     config() {
       return {
@@ -79,12 +77,12 @@ export function userscriptReload(
       const wsServer = new WebSocketServer({ host, port });
       webSocketServer = wsServer;
       wsServer.on("connection", () => {
-        console.log("[userscript-reload] client connected");
+        console.log("[userscript] client connected");
       });
       wsServer.on("error", (error) => {
-        console.error("[userscript-reload] WebSocket server error:", error);
+        console.error("[userscript] WebSocket server error:", error);
       });
-      console.log(`[userscript-reload] listening on ws://${host}:${port}`);
+      console.log(`[userscript] listening on ws://${host}:${port}`);
 
       server.middlewares.use(installUrlPath, (_request, response) => {
         response.setHeader("Content-Type", "application/javascript");
@@ -97,7 +95,7 @@ export function userscriptReload(
         buildPromise = buildPromise
           .then(() => buildUserscript(entryPath, outputPath, host, port, true))
           .catch((error) => {
-            console.error("[userscript-reload] build failed:", error);
+            console.error("[userscript] build failed:", error);
           });
         return buildPromise;
       };
@@ -170,7 +168,7 @@ async function buildUserscript(
       ? { footer: { js: createReloadClient(host, port) } }
       : {}),
   });
-  console.log(`[userscript-reload] built ${outputPath}`);
+  console.log(`[userscript] built ${outputPath}`);
 }
 
 function notifyReload(webSocketServer: WebSocketServer | undefined): void {
@@ -196,10 +194,10 @@ function openInstallPage(server: ViteDevServer, installUrlPath: string): void {
         : ["xdg-open", [installUrl]];
   execFile(command[0], command[1], (error) => {
     if (error) {
-      console.warn(`[userscript-reload] could not open ${installUrl}:`, error);
+      console.warn(`[userscript] could not open ${installUrl}:`, error);
     }
   });
-  console.log(`[userscript-reload] install page: ${installUrl}`);
+  console.log(`[userscript] install page: ${installUrl}`);
 }
 
 function createReloadClient(host: string, port: number): string {
