@@ -199,8 +199,7 @@ export function createDraftsMod({ state, draftMap }: CreateDraftsModOptions) {
   function addSortButton() {
     if (document.getElementById("sort-drafts-btn")) return;
 
-    const headers = Array.from(document.querySelectorAll("h2, h3"));
-    const draftHeader = headers.find((el) => el.textContent.includes("下書き"));
+    const draftHeader = document.querySelector(".drafts-title");
     if (!draftHeader) return;
 
     const btn = document.createElement("button");
