@@ -7,6 +7,8 @@ export type DraftListState = Readonly<{
   longitude?: number;
 }>;
 
+export type DraftState = ReturnType<typeof createDraftStateLoader>;
+
 export function createDraftStateLoader(
   key: string,
   version: string,
