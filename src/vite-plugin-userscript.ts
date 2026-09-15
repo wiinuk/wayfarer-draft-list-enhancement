@@ -139,7 +139,7 @@ export function userscript(options: UserscriptOptions = {}): Plugin {
 function createUserscriptMetadata(requireUrl?: string): string {
   const requireLine = requireUrl ? `// @require      ${requireUrl}\n` : "";
   return `// ==UserScript==
-// @name         Wayfarer Draft List Enhancement (dev)
+// @name         Wayfarer Draft List Enhancement
 // @namespace    http://tampermonkey.net/
 // @version      1.6.0
 // @description  Sort Niantic Wayfarer drafts using precise coordinates from API response
