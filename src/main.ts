@@ -1,4 +1,5 @@
 import { createAutoSaver } from "./auto-save";
+import { createDraftStateLoader } from "./draft-state-storage";
 import { DraftsResponse, PoiItem } from "./drafts-model";
 import { classNames, injectStyles, removeStyles } from "./global-styles";
 import { getDraftIdForCard } from "./ng-context";
@@ -9,6 +10,8 @@ const TARGET_PATH = "/new/submit";
 const EDIT_PATH = "/new/submit/new";
 const DRAFT_SUCCESS_PATH = "/new/submit/draft-success";
 const autoSaveStorageKey = "wayfarer-draft-auto-save";
+const draftStateStorageKey = "wayfarer-draft-list-state";
+const draftStateVersion = "3";
 
 // -------------------------------------------------------------------------
 // 2. 型定義・状態管理
@@ -16,26 +19,12 @@ const autoSaveStorageKey = "wayfarer-draft-auto-save";
 
 const draftMap: Map<string, PoiItem> = new Map();
 
-let locationAttestedFilterState: "all" | "attested" | "not-attested" = "all";
-
-const draftStateStorageKey = "wayfarer-draft-list-state";
-const draftStateVersion = "3";
-
-type DraftListState = Readonly<{
-  version: "3";
-  filter: "all" | "ready" | "not-ready";
-  locationAttestedFilter: "all" | "attested" | "not-attested";
-  sortMode: "unsorted" | "distance" | "last-modified";
-  latitude?: number;
-  longitude?: number;
-}>;
-
-let draftSortState: DraftListState = {
+const state = createDraftStateLoader(draftStateStorageKey, draftStateVersion, {
   version: draftStateVersion,
   filter: "all",
   locationAttestedFilter: "all",
   sortMode: "unsorted",
-};
+});
 
 let draftStateApplyTimer: number | null = null;
 let locationCheckInProgress = false;
@@ -45,27 +34,6 @@ const autoSaver = createAutoSaver({ autoSaveStorageKey, draftMap });
 
 let isActive = false;
 
-try {
-  const savedState: DraftListState | null = JSON.parse(
-    localStorage.getItem(draftStateStorageKey) || "null",
-  );
-
-  if (savedState && savedState.version === draftStateVersion) {
-    locationAttestedFilterState = savedState.locationAttestedFilter || "all";
-    draftSortState = savedState;
-  }
-} catch (e) {
-  console.warn("[Wayfarer Draft Sorter] Could not restore state:", e);
-}
-
-function saveDraftState() {
-  try {
-    localStorage.setItem(draftStateStorageKey, JSON.stringify(draftSortState));
-  } catch (e) {
-    console.warn("[Wayfarer Draft Sorter] Could not save state:", e);
-  }
-}
-
 function formatDistance(distance: number) {
   return distance < 1
     ? `${Math.round(distance * 1000)} m`
@@ -74,9 +42,9 @@ function formatDistance(distance: number) {
 
 function checkCurrentLocation(sortButton: HTMLButtonElement) {
   if (
-    draftSortState.sortMode !== "distance" ||
-    draftSortState.latitude === undefined ||
-    draftSortState.longitude === undefined ||
+    state.value.sortMode !== "distance" ||
+    state.value.latitude === undefined ||
+    state.value.longitude === undefined ||
     locationCheckInProgress
   ) {
     return;
@@ -85,8 +53,8 @@ function checkCurrentLocation(sortButton: HTMLButtonElement) {
   locationCheckInProgress = true;
   sortButton.innerText = "近い順（現在地を確認中...）";
 
-  const sortLatitude = draftSortState.latitude;
-  const sortLongitude = draftSortState.longitude;
+  const sortLatitude = state.value.latitude;
+  const sortLongitude = state.value.longitude;
 
   navigator.geolocation.getCurrentPosition(
     (position) => {
@@ -129,20 +97,16 @@ function scheduleDraftStateApply() {
 
     applyDraftFilter();
 
-    if (draftSortState.sortMode === "distance") {
+    if (state.value.sortMode === "distance") {
       if (
-        draftSortState.latitude === undefined ||
-        draftSortState.longitude === undefined
+        state.value.latitude === undefined ||
+        state.value.longitude === undefined
       ) {
         return;
       }
 
-      sortDraftCards(
-        draftSortState.latitude,
-        draftSortState.longitude,
-        "distance",
-      );
-    } else if (draftSortState.sortMode === "last-modified") {
+      sortDraftCards(state.value.latitude, state.value.longitude, "distance");
+    } else if (state.value.sortMode === "last-modified") {
       sortDraftCards(0, 0, "last-modified");
     } else {
       updateDraftCardBadges(0, 0, "unsorted");
@@ -407,14 +371,14 @@ function applyDraftFilter() {
     );
 
     const readinessHide =
-      draftSortState.filter !== "all" &&
-      (draftSortState.filter === "ready") !== readiness;
+      state.value.filter !== "all" &&
+      (state.value.filter === "ready") !== readiness;
 
     const isAttested = Boolean(draft.locationAttested);
 
     const locationAttestedHide =
-      locationAttestedFilterState !== "all" &&
-      (locationAttestedFilterState === "attested") !== isAttested;
+      state.value.locationAttestedFilter !== "all" &&
+      (state.value.locationAttestedFilter === "attested") !== isAttested;
 
     const shouldHide = readinessHide || locationAttestedHide;
 
@@ -425,24 +389,20 @@ function applyDraftFilter() {
 }
 
 function getDraftFilterLabel() {
-  if (draftSortState.filter === "ready") return "準備完了";
-  if (draftSortState.filter === "not-ready") return "不可";
+  if (state.value.filter === "ready") return "準備完了";
+  if (state.value.filter === "not-ready") return "不可";
   return "すべて";
 }
 
 function getLocationAttestedFilterLabel() {
-  if (locationAttestedFilterState === "attested") return "確認済";
-
-  if (locationAttestedFilterState === "not-attested") return "未確認";
-
+  if (state.value.locationAttestedFilter === "attested") return "確認済";
+  if (state.value.locationAttestedFilter === "not-attested") return "未確認";
   return "すべて";
 }
 
 function getSortModeLabel() {
-  if (draftSortState.sortMode === "distance") return "近い順";
-
-  if (draftSortState.sortMode === "last-modified") return "最近変更した順";
-
+  if (state.value.sortMode === "distance") return "近い順";
+  if (state.value.sortMode === "last-modified") return "最近変更した順";
   return "並び替えない";
 }
 
@@ -481,74 +441,65 @@ function addSortButton() {
 
   draftHeader.appendChild(locFilterBtn);
 
-  if (draftSortState.sortMode === "distance") {
+  if (state.value.sortMode === "distance") {
     checkCurrentLocation(btn);
   }
 
   filterBtn.addEventListener("click", () => {
-    draftSortState = {
-      ...draftSortState,
-      filter:
-        draftSortState.filter === "all"
-          ? "ready"
-          : draftSortState.filter === "ready"
-            ? "not-ready"
-            : "all",
-    };
-
-    saveDraftState();
+    state.mapSave((s) => {
+      return {
+        ...s,
+        filter:
+          s.filter === "all"
+            ? "ready"
+            : s.filter === "ready"
+              ? "not-ready"
+              : "all",
+      };
+    });
 
     filterBtn.innerText = `提出: ${getDraftFilterLabel()}`;
-
     applyDraftFilter();
   });
 
   locFilterBtn.addEventListener("click", () => {
-    locationAttestedFilterState =
-      locationAttestedFilterState === "all"
-        ? "attested"
-        : locationAttestedFilterState === "attested"
-          ? "not-attested"
-          : "all";
-
-    draftSortState = {
-      ...draftSortState,
-      locationAttestedFilter: locationAttestedFilterState,
-    };
-
-    saveDraftState();
-
+    state.mapSave((s) => {
+      return {
+        ...s,
+        locationAttestedFilter:
+          s.locationAttestedFilter === "all"
+            ? "attested"
+            : s.locationAttestedFilter === "attested"
+              ? "not-attested"
+              : "all",
+      };
+    });
     locFilterBtn.innerText = `位置: ${getLocationAttestedFilterLabel()}`;
-
     applyDraftFilter();
   });
 
   btn.addEventListener("click", () => {
-    if (draftSortState.sortMode === "distance") {
+    if (state.value.sortMode === "distance") {
       sortDraftCards(0, 0, "last-modified");
 
-      draftSortState = {
-        ...draftSortState,
-        sortMode: "last-modified",
-      };
-
-      saveDraftState();
-
+      state.mapSave((s) => {
+        return {
+          ...s,
+          sortMode: "last-modified",
+        };
+      });
       btn.innerText = getSortModeLabel();
-
       return;
     }
 
-    if (draftSortState.sortMode === "last-modified") {
-      draftSortState = {
-        ...draftSortState,
-        sortMode: "unsorted",
-      };
-
-      saveDraftState();
-
+    if (state.value.sortMode === "last-modified") {
+      state.mapSave((s) => {
+        return {
+          ...s,
+          sortMode: "unsorted",
+        };
+      });
       btn.innerText = getSortModeLabel();
-
       return;
     }
 
@@ -574,14 +525,14 @@ function addSortButton() {
           return;
         }
 
-        draftSortState = {
-          ...draftSortState,
-          sortMode: "distance",
-          latitude: userLat,
-          longitude: userLon,
-        };
-
-        saveDraftState();
+        state.mapSave((s) => {
+          return {
+            ...s,
+            sortMode: "distance",
+            latitude: userLat,
+            longitude: userLon,
+          };
+        });
 
         btn.innerText = `近い順（基準地点から約 ${formatDistance(0)}）`;
 
