@@ -12,7 +12,7 @@ interface CreateAutoSaveOptions {
   readonly draftMap: ReadonlyMap<string, PoiItem>;
 }
 
-export function createAutoSaver({
+export function createAutoSaveMod({
   autoSaveStorageKey,
   draftMap,
 }: CreateAutoSaveOptions) {
