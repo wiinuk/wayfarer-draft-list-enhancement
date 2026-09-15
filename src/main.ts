@@ -4,6 +4,7 @@ import { createDraftStateLoader } from "./draft-state-storage";
 import { DraftsResponse, PoiItem } from "./drafts-model";
 import { classNames, injectStyles, removeStyles } from "./global-styles";
 import { getDraftIdForCard } from "./ng-context";
+import { startRouting } from "./routing";
 
 export {};
 
@@ -559,48 +560,16 @@ function stop() {
   removeStyles();
 }
 
-// -------------------------------------------------------------------------
-// 13. SPAルーティング変化
-// -------------------------------------------------------------------------
-
-function handleLocationChange() {
-  const path = window.location.pathname;
-
-  if (path === TARGET_PATH) {
-    start();
-    return;
-  }
-
-  if (path === EDIT_PATH) {
-    stop();
-    autoSaver.startWaitingForSaveButton();
-    return;
-  }
-
-  if (path === DRAFT_SUCCESS_PATH) {
-    stop();
-    autoSaver.handleDraftSuccessPage();
-    return;
-  }
-
-  stop();
-}
-
-const originalPushState = history.pushState;
-
-history.pushState = function (...args) {
-  originalPushState.apply(this, args);
-  handleLocationChange();
-};
-
-const originalReplaceState = history.replaceState;
-
-history.replaceState = function (...args) {
-  originalReplaceState.apply(this, args);
-  handleLocationChange();
-};
-
-window.addEventListener("popstate", handleLocationChange);
-
-// 初回実行
-handleLocationChange();
+startRouting({
+  [TARGET_PATH]: { start, stop },
+  [EDIT_PATH]: {
+    start() {
+      autoSaver.startWaitingForSaveButton();
+    },
+  },
+  [DRAFT_SUCCESS_PATH]: {
+    start() {
+      autoSaver.handleDraftSuccessPage();
+    },
+  },
+});
