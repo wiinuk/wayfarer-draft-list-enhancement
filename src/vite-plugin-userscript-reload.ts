@@ -1,3 +1,5 @@
+//spell-checker: words Niantic Userscript
+
 import { execFile } from "node:child_process";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
@@ -35,14 +37,38 @@ export function userscriptReload(
   return {
     name: "userscript-reload",
 
+    config() {
+      return {
+        build: {
+          lib: {
+            entry: options.entry ?? "src/main.ts",
+            name: "WayfarerDraftListEnhancement",
+            formats: ["iife"],
+            fileName: () => "wayfarer-draft-list-enhancement.user.js",
+          },
+        },
+      };
+    },
+
     configResolved(resolvedConfig) {
       config = resolvedConfig;
       development = resolvedConfig.command === "serve";
       entryPath = path.resolve(config.root, options.entry ?? "src/main.ts");
       outputPath = path.resolve(
         config.root,
-        options.output ?? "dist/wayfarer-draft-list-enhancement.debug.js",
+        options.output ??
+          (development
+            ? "dev/wayfarer-draft-list-enhancement.debug.js"
+            : "dist/wayfarer-draft-list-enhancement.user.js"),
       );
+    },
+
+    async closeBundle() {
+      if (development) {
+        return;
+      }
+
+      await buildUserscript(entryPath, outputPath, "", 0, false);
     },
 
     configureServer(server) {
@@ -69,7 +95,7 @@ export function userscriptReload(
 
       const rebuild = () => {
         buildPromise = buildPromise
-          .then(() => buildUserscript(entryPath, outputPath, host, port))
+          .then(() => buildUserscript(entryPath, outputPath, host, port, true))
           .catch((error) => {
             console.error("[userscript-reload] build failed:", error);
           });
@@ -112,7 +138,8 @@ export function userscriptReload(
   };
 }
 
-function createUserscriptMetadata(requireUrl: string): string {
+function createUserscriptMetadata(requireUrl?: string): string {
+  const requireLine = requireUrl ? `// @require      ${requireUrl}\n` : "";
   return `// ==UserScript==
 // @name         Wayfarer Draft List Enhancement (dev)
 // @namespace    http://tampermonkey.net/
@@ -120,8 +147,7 @@ function createUserscriptMetadata(requireUrl: string): string {
 // @description  Sort Niantic Wayfarer drafts using precise coordinates from API response
 // @match        https://wayfarer.scopely.com/*
 // @grant        none
-// @require      ${requireUrl}
-// ==/UserScript==`;
+${requireLine}// ==/UserScript==`;
 }
 
 async function buildUserscript(
@@ -129,6 +155,7 @@ async function buildUserscript(
   outputPath: string,
   host: string,
   port: number,
+  includeReloadClient: boolean,
 ): Promise<void> {
   await mkdir(path.dirname(outputPath), { recursive: true });
   await esbuild.build({
@@ -137,8 +164,11 @@ async function buildUserscript(
     format: "iife",
     outfile: outputPath,
     platform: "browser",
-    sourcemap: "inline",
-    footer: { js: createReloadClient(host, port) },
+    banner: { js: `${createUserscriptMetadata()}\n` },
+    sourcemap: includeReloadClient ? "inline" : false,
+    ...(includeReloadClient
+      ? { footer: { js: createReloadClient(host, port) } }
+      : {}),
   });
   console.log(`[userscript-reload] built ${outputPath}`);
 }
