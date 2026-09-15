@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wayfarer Draft List Enhancement
 // @namespace    http://tampermonkey.net/
-// @version      1.7
+// @version      1.8
 // @description  Sort Niantic Wayfarer drafts using precise coordinates from API response
 // @match        https://wayfarer.scopely.com/*
 // @grant        none
@@ -73,6 +73,9 @@
     btnLocation: `${classNamePrefix}-btn-location`,
     btnAutoSave: `${classNamePrefix}-btn-auto-save`,
     btnAutoSaveProcessing: `${classNamePrefix}-btn-auto-save-processing`,
+    searchContainer: `${classNamePrefix}-search-container`,
+    searchInput: `${classNamePrefix}-search-input`,
+    searchClear: `${classNamePrefix}-search-clear`,
     locationBadge: `${classNamePrefix}-location-attested-badge`,
     locationAttested: `${classNamePrefix}-location-attested`,
     distanceBadge: `${classNamePrefix}-distance-badge`
@@ -101,6 +104,45 @@
 
         .${classNames.btnLocation} {
             background-color: #388e3c;
+        }
+
+        .${classNames.searchContainer} {
+            position: relative;
+            display: inline-block;
+            margin-left: 8px;
+            width: stretch;
+            vertical-align: middle;
+        }
+
+        .${classNames.searchInput} {
+            box-sizing: border-box;
+            padding: 5px 32px 5px 8px;
+            width: 100%;
+            border: 1px solid #c7c7c7;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: normal;
+        }
+
+        .${classNames.searchClear} {
+            position: absolute;
+            top: 50%;
+            right: 6px;
+            display: none;
+            padding: 0;
+            width: 20px;
+            height: 20px;
+            transform: translateY(-50%);
+            cursor: pointer;
+            color: #666;
+            background: transparent;
+            border: 0;
+            font-size: 18px;
+            line-height: 20px;
+        }
+
+        .${classNames.searchClear}:hover {
+            color: #111;
         }
 
         /* \u4F4D\u7F6E\u8A8D\u8A3C\u30DC\u30BF\u30F3 */
@@ -250,7 +292,7 @@
     return void 0;
   }
 
-  // src/auto-save.ts
+  // src/auto-save-mod.ts
   function createAutoSaveMod({
     autoSaveStorageKey: autoSaveStorageKey2,
     draftMap: draftMap2
@@ -439,13 +481,51 @@
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
+  function parseCoordinate(value) {
+    const decimalMatch = value.trim().match(/^([-+]?\d+(?:\.\d+)?)\s*,\s*([-+]?\d+(?:\.\d+)?)$/);
+    if (decimalMatch) {
+      return validateCoordinates(
+        Number(decimalMatch[1]),
+        Number(decimalMatch[2])
+      );
+    }
+    const dmsMatch = value.trim().match(
+      /^(\d{1,3})°\s*(\d{1,2})['′]\s*(\d+(?:\.\d+)?)\s*["″]\s*([NS])\s+(\d{1,3})°\s*(\d{1,2})['′]\s*(\d+(?:\.\d+)?)\s*["″]\s*([EW])$/i
+    );
+    if (!dmsMatch) return void 0;
+    const latitude = degreesMinutesSecondsToDecimal(
+      Number(dmsMatch[1]),
+      Number(dmsMatch[2]),
+      Number(dmsMatch[3]),
+      dmsMatch[4]
+    );
+    const longitude = degreesMinutesSecondsToDecimal(
+      Number(dmsMatch[5]),
+      Number(dmsMatch[6]),
+      Number(dmsMatch[7]),
+      dmsMatch[8]
+    );
+    return validateCoordinates(latitude, longitude);
+  }
+  function degreesMinutesSecondsToDecimal(degrees, minutes, seconds, direction) {
+    const value = degrees + minutes / 60 + seconds / 3600;
+    return /[SW]/i.test(direction) ? -value : value;
+  }
+  function validateCoordinates(latitude, longitude) {
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      return void 0;
+    }
+    return { latitude, longitude };
+  }
 
   // src/draft-card-mod.ts
   function formatDistance(distance) {
     return distance < 1 ? `${Math.round(distance * 1e3)} m` : `${distance.toFixed(2)} km`;
   }
+  var searchRadiusKm = 0.08;
   function createDraftsMod({ state: state2, draftMap: draftMap2 }) {
     let locationCheckInProgress = false;
+    let searchApplyTimer = null;
     function checkCurrentLocation(sortButton) {
       if (state2.value.sortMode !== "distance" || state2.value.latitude === void 0 || state2.value.longitude === void 0 || locationCheckInProgress) {
         return;
@@ -564,8 +644,7 @@
     }
     function addSortButton() {
       if (document.getElementById("sort-drafts-btn")) return;
-      const headers = Array.from(document.querySelectorAll("h2, h3"));
-      const draftHeader = headers.find((el) => el.textContent.includes("\u4E0B\u66F8\u304D"));
+      const draftHeader = document.querySelector(".drafts-title");
       if (!draftHeader) return;
       const btn = document.createElement("button");
       btn.id = "sort-drafts-btn";
@@ -660,6 +739,62 @@
         );
       });
     }
+    function addSearchInput() {
+      if (document.getElementById("search-drafts-input")) return;
+      const draftHeader = document.querySelector(".drafts-title");
+      if (!draftHeader) return;
+      const searchContainer = document.createElement("span");
+      searchContainer.className = classNames.searchContainer;
+      const searchInput = document.createElement("input");
+      searchInput.id = "search-drafts-input";
+      searchInput.className = classNames.searchInput;
+      searchInput.type = "search";
+      searchInput.placeholder = "\u5EA7\u6A19\u3067\u691C\u7D22 (\u4F8B: 35.65861, 139.74556)";
+      searchInput.setAttribute("aria-label", "\u5EA7\u6A19\u3067\u4E0B\u66F8\u304D\u3092\u691C\u7D22");
+      searchInput.value = state2.value.query ?? "";
+      const clearButton = document.createElement("button");
+      clearButton.type = "button";
+      clearButton.className = classNames.searchClear;
+      clearButton.innerText = "\xD7";
+      clearButton.setAttribute("aria-label", "\u691C\u7D22\u6761\u4EF6\u3092\u30AF\u30EA\u30A2");
+      const updateClearButton = () => {
+        clearButton.style.display = searchInput.value ? "block" : "none";
+      };
+      searchInput.addEventListener("input", () => {
+        updateClearButton();
+        if (searchApplyTimer !== null) {
+          window.clearTimeout(searchApplyTimer);
+        }
+        searchApplyTimer = window.setTimeout(() => {
+          searchApplyTimer = null;
+          state2.mapSave((currentState) => ({
+            ...currentState,
+            query: searchInput.value
+          }));
+          applyDraftFilter();
+        }, 300);
+      });
+      clearButton.addEventListener("click", () => {
+        searchInput.value = "";
+        searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+        searchInput.focus();
+      });
+      updateClearButton();
+      searchContainer.append(searchInput, clearButton);
+      draftHeader.appendChild(searchContainer);
+    }
+    function isQueryHidden(draft) {
+      const query = state2.value.query?.trim() ?? "";
+      if (!query) return false;
+      const coordinates = parseCoordinate(query);
+      if (!coordinates) return true;
+      return getDistance(
+        coordinates.latitude,
+        coordinates.longitude,
+        draft.lat,
+        draft.lng
+      ) >= searchRadiusKm;
+    }
     function applyDraftFilter() {
       document.querySelectorAll(
         "app-submission-card"
@@ -667,17 +802,23 @@
         const draftId = getDraftIdForCard(card, draftMap2);
         const draft = draftId ? draftMap2.get(draftId) : void 0;
         if (!draft) return;
-        const readiness = Boolean(
-          (draft.mainImageGcsPath || draft.mainImageServingUrl) && (draft.supportingImageGcsPaths && draft.supportingImageGcsPaths.length > 0 || draft.supportingImageServingUrls && draft.supportingImageServingUrls.length > 0) && typeof draft.title === "string" && draft.title.trim().length > 0 && typeof draft.description === "string" && draft.description.trim().length > 0
-        );
-        const readinessHide = state2.value.filter !== "all" && state2.value.filter === "ready" !== readiness;
-        const isAttested = Boolean(draft.locationAttested);
-        const locationAttestedHide = state2.value.locationAttestedFilter !== "all" && state2.value.locationAttestedFilter === "attested" !== isAttested;
-        const shouldHide = readinessHide || locationAttestedHide;
+        const shouldHide = isLocationAttestedHidden(draft) || isReadinessHidden(draft) || isQueryHidden(draft);
         if (card.hidden !== shouldHide) {
           card.hidden = shouldHide;
         }
       });
+    }
+    function isReadinessHidden(draft) {
+      const readiness = Boolean(
+        (draft.mainImageGcsPath || draft.mainImageServingUrl) && (draft.supportingImageGcsPaths && draft.supportingImageGcsPaths.length > 0 || draft.supportingImageServingUrls && draft.supportingImageServingUrls.length > 0) && typeof draft.title === "string" && draft.title.trim().length > 0 && typeof draft.description === "string" && draft.description.trim().length > 0
+      );
+      const readinessHide = state2.value.filter !== "all" && state2.value.filter === "ready" !== readiness;
+      return readinessHide;
+    }
+    function isLocationAttestedHidden(draft) {
+      const isAttested = Boolean(draft.locationAttested);
+      const locationAttestedHide = state2.value.locationAttestedFilter !== "all" && state2.value.locationAttestedFilter === "attested" !== isAttested;
+      return locationAttestedHide;
     }
     function removeAddedUI() {
       [
@@ -688,6 +829,11 @@
         const el = document.getElementById(id);
         if (el) el.remove();
       });
+      document.querySelector(`.${classNames.searchContainer}`)?.remove();
+      if (searchApplyTimer !== null) {
+        window.clearTimeout(searchApplyTimer);
+        searchApplyTimer = null;
+      }
       document.querySelectorAll(
         `.${classNames.locationBadge}, .${classNames.distanceBadge}, .${classNames.btnAutoSave}`
       ).forEach((el) => el.remove());
@@ -697,6 +843,7 @@
       sortDraftCards,
       updateDraftCardBadges,
       addSortButton,
+      addSearchInput,
       applyDraftFilter,
       removeAddedUI
     };
@@ -831,14 +978,16 @@
     apiHook.setIsActive(isActive);
     injectStyles();
     draftsMod.addSortButton();
+    draftsMod.addSearchInput();
     autoSaveMod.addButtons();
     if (!observer) {
       observer = new MutationObserver(() => {
         if (!isActive) return;
         injectStyles();
         draftsMod.addSortButton();
-        scheduleDraftStateApply();
+        draftsMod.addSearchInput();
         autoSaveMod.addButtons();
+        scheduleDraftStateApply();
       });
     }
     observer.observe(document.body, {
