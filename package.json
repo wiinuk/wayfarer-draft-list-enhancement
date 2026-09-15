@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Development environment for the Wayfarer Draft List Enhancement userscript",
   "private": true,
-  "main": "dist/wayfarer-draft-list-enhancement.user.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

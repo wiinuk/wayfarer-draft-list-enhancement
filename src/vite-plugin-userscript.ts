@@ -9,7 +9,7 @@ import WebSocket, { WebSocketServer } from "ws";
 import type { Plugin, ResolvedConfig, ViteDevServer } from "vite";
 
 export interface UserscriptOptions {
-  entry?: string;
+  entry: string;
   host?: string;
   port?: number;
   installPath?: string;
@@ -18,9 +18,12 @@ export interface UserscriptOptions {
 }
 
 const reloadMessage = "reload";
-const installPath = "/__userscript__/wayfarer-draft-list-enhancement.user.js";
 
-export function userscript(options: UserscriptOptions = {}): Plugin {
+export function userscript(options: UserscriptOptions): Plugin {
+  const scriptBaseName = "wayfarer-draft-list-enhancement";
+  const scriptFileName = `${scriptBaseName}.user.js`;
+  const installPath = `/__userscript__/${scriptFileName}`;
+
   let config: ResolvedConfig;
   let entryPath: string;
   let outputPath: string;
@@ -39,7 +42,7 @@ export function userscript(options: UserscriptOptions = {}): Plugin {
       return {
         build: {
           lib: {
-            entry: options.entry ?? "src/main.ts",
+            entry: options.entry,
             name: "WayfarerDraftListEnhancement",
             formats: ["iife"],
             fileName: () => "wayfarer-draft-list-enhancement.user.js",
@@ -51,13 +54,15 @@ export function userscript(options: UserscriptOptions = {}): Plugin {
     configResolved(resolvedConfig) {
       config = resolvedConfig;
       development = resolvedConfig.command === "serve";
-      entryPath = path.resolve(config.root, options.entry ?? "src/main.ts");
+      entryPath = path.resolve(config.root, options.entry);
       outputPath = path.resolve(
         config.root,
-        options.output ??
-          (development
-            ? "dev/wayfarer-draft-list-enhancement.debug.js"
-            : "dist/wayfarer-draft-list-enhancement.user.js"),
+        development
+          ? "dev/wayfarer-draft-list-enhancement.debug.js"
+          : path.join(
+              options.output ?? path.dirname(entryPath),
+              scriptFileName,
+            ),
       );
     },
 
