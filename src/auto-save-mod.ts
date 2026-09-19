@@ -25,7 +25,6 @@ export function createAutoSaveMod({
       if (!value) return null;
 
       const state = JSON.parse(value);
-
       if (
         !state ||
         typeof state.draftId !== "string" ||
@@ -92,27 +91,22 @@ export function createAutoSaveMod({
       }
 
       const draftId = getDraftIdForCard(card, draftMap);
-
       if (!draftId) return;
 
       const draft = draftMap.get(draftId);
       if (!draft) return;
 
       // 既に位置認証（位置確認）済みの場合はボタンを表示しない
-      if (draft.locationAttested) {
-        return;
-      }
+      if (draft.locationAttested) return;
 
       const title = card.querySelector(".submission-title");
       if (!title) return;
 
       const button = document.createElement("button");
-
       button.type = "button";
       button.className = classNames.btnAutoSave;
       button.textContent = "位置認証";
       button.title = "この下書きを変更せずに保存して位置認証します";
-
       button.addEventListener("click", (event) => {
         // カード自体のクリックイベントを発火させない
         event.preventDefault();
@@ -148,12 +142,9 @@ export function createAutoSaveMod({
       title: draftMap.get(draftId)?.title || "(unknown)",
     });
 
-    /*
-     * 元々の app-submission-card のクリック処理を利用する。
-     *
-     * setTimeout を入れることで、このボタン自身の click イベント
-     * が Angular 側のカード処理に干渉する可能性を下げる。
-     */
+    // 元々の app-submission-card のクリック処理を利用する。
+    // setTimeout を入れることで、このボタン自身の click イベント
+    // が Angular 側のカード処理に干渉する可能性を下げる。
     window.setTimeout(() => {
       if (!document.contains(card)) {
         clearAutoSaveState();
@@ -172,7 +163,6 @@ export function createAutoSaveMod({
     stopWaitingForSaveButton();
 
     const state = getAutoSaveState();
-
     if (!state) {
       console.log("[Wayfarer Draft Sorter] No auto-save operation pending.");
       return;
@@ -181,40 +171,30 @@ export function createAutoSaveMod({
     console.log("[Wayfarer Draft Sorter] Waiting for save button...");
 
     let clicked = false;
-
     const tryClickSaveButton = () => {
       if (clicked) return;
 
       const button = document.querySelector(
         "button.save-draft-button",
       ) as HTMLButtonElement | null;
-
       if (!button) return;
 
-      /*
-       * Angular側が disabled 属性を解除するまで待つ。
-       *
-       * :disabled だけでなく button.disabled も確認する。
-       */
-      if (button.disabled) {
-        return;
-      }
+      // Angular側が disabled 属性を解除するまで待つ。
+      // :disabled だけでなく button.disabled も確認する。
+      if (button.disabled) return;
 
       // 念のため表示状態も確認
       const style = window.getComputedStyle(button);
-
       if (style.display === "none" || style.visibility === "hidden") {
         return;
       }
 
       clicked = true;
-
       console.log(
         "[Wayfarer Draft Sorter] Save button is enabled. Clicking it.",
       );
 
       button.click();
-
       stopWaitingForSaveButton();
     };
 
@@ -223,10 +203,8 @@ export function createAutoSaveMod({
 
     if (clicked) return;
 
-    /*
-     * 編集画面では現在地取得などによって Angular が
-     * disabled 属性を動的に変更するため MutationObserver を使用。
-     */
+    // 編集画面では現在地取得などによって Angular が
+    // disabled 属性を動的に変更するため MutationObserver を使用。
     saveButtonObserver = new MutationObserver(() => {
       tryClickSaveButton();
     });
@@ -238,10 +216,8 @@ export function createAutoSaveMod({
       attributeFilter: ["disabled", "class", "style"],
     });
 
-    /*
-     * MutationObserverだけでは拾いにくいケースに備えて
-     * 軽いポーリングも併用する。
-     */
+    // MutationObserverだけでは拾いにくいケースに備えて
+    // 軽いポーリングも併用する。
     saveButtonPollTimer = window.setInterval(() => {
       tryClickSaveButton();
     }, 250);
@@ -264,26 +240,18 @@ export function createAutoSaveMod({
    */
   function handleDraftSuccessPage() {
     const state = getAutoSaveState();
-
-    if (!state) {
-      return;
-    }
+    if (!state) return;
 
     console.log(
       "[Wayfarer Draft Sorter] Draft saved successfully. Returning to draft list.",
     );
 
-    /*
-     * 少し待ってから一覧へ戻す。
-     *
-     * 成功画面の描画を完了させてから遷移するため。
-     */
+    // 少し待ってから一覧へ戻す。
+    // 成功画面の描画を完了させてから遷移するため。
     window.setTimeout(() => {
       clearAutoSaveState();
 
-      /*
-       * Angular Router を使わず URL を直接指定。
-       */
+      // Angular Router を使わず URL を直接指定。
       window.location.href = "https://wayfarer.scopely.com/new/submit";
     }, 300);
   }
