@@ -13,10 +13,6 @@ const autoSaveStorageKey = "wayfarer-draft-auto-save";
 const draftStateStorageKey = "wayfarer-draft-list-state";
 const draftStateVersion = "3";
 
-// -------------------------------------------------------------------------
-// 2. 型定義・状態管理
-// -------------------------------------------------------------------------
-
 const draftMap: Map<string, PoiItem> = new Map();
 const state = createDraftStateLoader(draftStateStorageKey, draftStateVersion, {
   version: draftStateVersion,
