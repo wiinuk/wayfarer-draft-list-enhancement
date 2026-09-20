@@ -119,3 +119,77 @@ export function getDraftIdForCard(
 }
 
 type WithContext<T> = T & { readonly __ngContext__?: unknown };
+
+function findSubmitMapComponent(): Record<string, unknown> | null {
+  const root = document.querySelector("app-submit-wayspot-map");
+  if (!root) return null;
+
+  const seen = new WeakSet<object>();
+  const visit = (
+    value: unknown,
+    depth: number,
+  ): Record<string, unknown> | null => {
+    if (
+      !value ||
+      (typeof value !== "object" && typeof value !== "function") ||
+      depth > 8
+    ) {
+      return null;
+    }
+    const object = value as Record<string, unknown>;
+    if (seen.has(object)) return null;
+    seen.add(object);
+
+    const locationSelected = object.locationSelected;
+    const hasLocationObservable =
+      locationSelected &&
+      typeof locationSelected === "object" &&
+      typeof (locationSelected as Record<string, unknown>).subscribe ===
+        "function";
+    if (
+      hasLocationObservable &&
+      (typeof object.onMapClick === "function" ||
+        (typeof object._updateMapSelection === "function" &&
+          typeof object._applySelectedMarker === "function"))
+    ) {
+      return object;
+    }
+
+    for (const child of Object.values(object)) {
+      const result = visit(child, depth + 1);
+      if (result) return result;
+    }
+    return null;
+  };
+
+  const elements = [root, ...root.querySelectorAll("*")];
+  for (const element of elements) {
+    const context = (element as HTMLElement & { __ngContext__?: unknown })
+      .__ngContext__;
+    const component = visit(context, 0);
+    if (component) return component;
+  }
+  return null;
+}
+
+export function setCoordinate(lat: number, lng: number) {
+  const component = findSubmitMapComponent();
+  if (!component) return false;
+
+  const coordinate = { lat, lng };
+  if (typeof component.onMapClick === "function") {
+    (component.onMapClick as (value: typeof coordinate) => void)(coordinate);
+    return true;
+  }
+  if (
+    typeof component._updateMapSelection === "function" &&
+    typeof component._applySelectedMarker === "function"
+  ) {
+    (component._updateMapSelection as (value: typeof coordinate) => void)(
+      coordinate,
+    );
+    (component._applySelectedMarker as () => void)();
+    return true;
+  }
+  return false;
+}

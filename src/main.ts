@@ -3,6 +3,7 @@ import { createAutoSaveMod } from "./mods/auto-save-mod";
 import { createDraftsMod } from "./mods/draft-card-mod";
 import { createDraftStateLoader } from "./state";
 import { DraftsResponse, PoiItem } from "./drafts-model";
+import { createExternalDraftUpdateMod } from "./mods/external-update-mod";
 import { injectStyles, removeStyles } from "./global-styles";
 import { startRouting } from "./routing";
 
@@ -10,6 +11,7 @@ const TARGET_PATH = "/new/submit";
 const EDIT_PATH = "/new/submit/new";
 const DRAFT_SUCCESS_PATH = "/new/submit/draft-success";
 const autoSaveStorageKey = "wayfarer-draft-auto-save";
+const externalDraftUpdateStorageKey = "wayfarer-external-draft-update";
 const draftStateStorageKey = "wayfarer-draft-list-state";
 const draftStateVersion = "3";
 
@@ -23,6 +25,14 @@ const state = createDraftStateLoader(draftStateStorageKey, draftStateVersion, {
 
 const draftsMod = createDraftsMod({ state, draftMap });
 const autoSaveMod = createAutoSaveMod({ autoSaveStorageKey, draftMap });
+const externalDraftUpdateMod = createExternalDraftUpdateMod({
+  storageKey: externalDraftUpdateStorageKey,
+  state,
+  draftMap,
+  applyDraftFilter: () => draftsMod.applyDraftFilter(),
+  sortDraftCards: (latitude, longitude, sortMode) =>
+    draftsMod.sortDraftCards(latitude, longitude, sortMode),
+});
 
 let isActive = false;
 let draftStateApplyTimer: number | null = null;
@@ -68,6 +78,7 @@ function onDraftsReceived(data: DraftsResponse) {
         draftMap.set(item.id, item);
       }
     });
+    externalDraftUpdateMod.processDrafts();
     scheduleDraftStateApply();
     console.log("[Wayfarer Draft Sorter] Drafts loaded:", draftMap);
   }
@@ -85,6 +96,7 @@ function start() {
   apiHook.setIsActive(isActive);
 
   injectStyles();
+  externalDraftUpdateMod.startOnDraftList();
   draftsMod.addSortButton();
   draftsMod.addSearchInput();
   autoSaveMod.addButtons();
@@ -133,6 +145,7 @@ startRouting({
   [TARGET_PATH]: { start, stop },
   [EDIT_PATH]: {
     start() {
+      externalDraftUpdateMod.startOnEditPage();
       autoSaveMod.startWaitingForSaveButton();
     },
   },
