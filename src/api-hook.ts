@@ -19,7 +19,6 @@ export function hookApi({
   const originalFetch = window.fetch;
   window.fetch = async function (...args) {
     const response = await originalFetch.apply(this, args);
-
     if (!isActive) return response;
 
     const url =
@@ -44,25 +43,19 @@ export function hookApi({
 
   // XHRフック
   const xhrUrls: WeakMap<XMLHttpRequest, string> = new WeakMap();
-
   const originalXhrOpen = XMLHttpRequest.prototype.open;
-
   XMLHttpRequest.prototype.open = function (...args: never) {
     xhrUrls.set(this, String(args[1]));
     return originalXhrOpen.apply(this, args);
   };
 
   const originalXhrSend = XMLHttpRequest.prototype.send;
-
   XMLHttpRequest.prototype.send = function (...args: never) {
     this.addEventListener("load", () => {
       if (!isActive) return;
 
       const url = xhrUrls.get(this);
-
-      if (!url || !url.includes(draftsPath)) {
-        return;
-      }
+      if (!url || !url.includes(draftsPath)) return;
 
       try {
         const data =
