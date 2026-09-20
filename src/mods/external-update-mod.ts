@@ -56,6 +56,14 @@ function parseUpdateHash(): ExternalDraftUpdate | null {
     }
 }
 
+function removeSymbols(text: string) {
+    return text.replace(
+        // eslint-disable-next-line no-misleading-character-class
+        /[\u{3200}-\u{32FF}\u{1F000}-\u{1FFFF}\u{2100}-\u{2BFF}\u{FE00}-\u{FE0F}\u200D]/gu,
+        "",
+    );
+}
+
 export function createExternalDraftUpdateMod({
     storageKey,
     state,
@@ -65,6 +73,8 @@ export function createExternalDraftUpdateMod({
 }: CreateExternalDraftUpdateOptions) {
     let listProcessing = false;
     let draftClickStarted = false;
+    let draftListObserver: MutationObserver | null = null;
+    let draftListPollTimer: number | null = null;
     let editObserver: MutationObserver | null = null;
     let editPollTimer: number | null = null;
 
@@ -96,10 +106,31 @@ export function createExternalDraftUpdateMod({
         sessionStorage.removeItem(storageKey);
     }
 
+    function stopWaitingForDraftList() {
+        draftListObserver?.disconnect();
+        draftListObserver = null;
+        if (draftListPollTimer !== null) {
+            window.clearInterval(draftListPollTimer);
+        }
+        draftListPollTimer = null;
+    }
+
+    function waitForDraftList() {
+        if (draftListObserver || draftListPollTimer !== null) return;
+
+        draftListObserver = new MutationObserver(processDrafts);
+        draftListObserver.observe(document.body, {
+            childList: true,
+            subtree: true,
+        });
+        draftListPollTimer = window.setInterval(processDrafts, 250);
+    }
+
     function startOnDraftList() {
         if (listProcessing) return;
         const update = parseUpdateHash();
         if (!update) return;
+        stopWaitingForDraftList();
         listProcessing = true;
         saveUpdate(update);
         history.replaceState(
@@ -144,15 +175,28 @@ export function createExternalDraftUpdateMod({
             return [{ card: card as HTMLElement, draft }];
         });
 
+        if (candidates.length === 0 && update.title !== undefined) {
+            waitForDraftList();
+            return;
+        }
+
         const exactMatches =
             update.title === undefined
                 ? []
                 : candidates.filter(
-                      ({ draft }) => draft.title === update.title,
+                      ({ draft }) =>
+                          update.title !== undefined &&
+                          draft.title === removeSymbols(update.title),
                   );
+
+        if (exactMatches.length !== 1 && update.title !== undefined) {
+            waitForDraftList();
+            return;
+        }
 
         if (exactMatches.length === 1 && !draftClickStarted) {
             draftClickStarted = true;
+            stopWaitingForDraftList();
             window.setTimeout(() => exactMatches[0].card.click(), 50);
         }
     }
