@@ -1,4 +1,4 @@
-import { DraftState } from "./draft-state-storage";
+import { DraftState } from "./state";
 import { PoiItem } from "./drafts-model";
 import { getDistance, parseCoordinate } from "./geometry";
 import { classNames } from "./global-styles";
