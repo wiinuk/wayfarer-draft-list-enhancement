@@ -2,5 +2,14 @@
   "semi": true,
   "singleQuote": false,
   "trailingComma": "all",
-  "printWidth": 80
+  "printWidth": 80,
+  "tabWidth": 4,
+  "overrides": [
+    {
+      "files": ["*.json", "*.config.{js,ts}"],
+      "options": {
+        "tabWidth": 2
+      }
+    }
+  ]
 }

@@ -1,18 +1,18 @@
 const classNamePrefix = "wf";
 export const classNames = Object.freeze({
-  styleId: `${classNamePrefix}-enhancement-styles`,
-  btn: `${classNamePrefix}-btn`,
-  btnSort: `${classNamePrefix}-btn-sort`,
-  btnFilter: `${classNamePrefix}-btn-filter`,
-  btnLocation: `${classNamePrefix}-btn-location`,
-  btnAutoSave: `${classNamePrefix}-btn-auto-save`,
-  btnAutoSaveProcessing: `${classNamePrefix}-btn-auto-save-processing`,
-  searchContainer: `${classNamePrefix}-search-container`,
-  searchInput: `${classNamePrefix}-search-input`,
-  searchClear: `${classNamePrefix}-search-clear`,
-  locationBadge: `${classNamePrefix}-location-attested-badge`,
-  locationAttested: `${classNamePrefix}-location-attested`,
-  distanceBadge: `${classNamePrefix}-distance-badge`,
+    styleId: `${classNamePrefix}-enhancement-styles`,
+    btn: `${classNamePrefix}-btn`,
+    btnSort: `${classNamePrefix}-btn-sort`,
+    btnFilter: `${classNamePrefix}-btn-filter`,
+    btnLocation: `${classNamePrefix}-btn-location`,
+    btnAutoSave: `${classNamePrefix}-btn-auto-save`,
+    btnAutoSaveProcessing: `${classNamePrefix}-btn-auto-save-processing`,
+    searchContainer: `${classNamePrefix}-search-container`,
+    searchInput: `${classNamePrefix}-search-input`,
+    searchClear: `${classNamePrefix}-search-clear`,
+    locationBadge: `${classNamePrefix}-location-attested-badge`,
+    locationAttested: `${classNamePrefix}-location-attested`,
+    distanceBadge: `${classNamePrefix}-distance-badge`,
 });
 
 const globalStyles = `
@@ -138,14 +138,14 @@ const globalStyles = `
     `;
 
 export function injectStyles() {
-  if (document.getElementById(classNames.styleId)) return;
-  const styleElement = document.createElement("style");
-  styleElement.id = classNames.styleId;
-  styleElement.textContent = globalStyles;
-  (document.head || document.documentElement).appendChild(styleElement);
+    if (document.getElementById(classNames.styleId)) return;
+    const styleElement = document.createElement("style");
+    styleElement.id = classNames.styleId;
+    styleElement.textContent = globalStyles;
+    (document.head || document.documentElement).appendChild(styleElement);
 }
 
 export function removeStyles() {
-  const styleElement = document.getElementById(classNames.styleId);
-  if (styleElement) styleElement.remove();
+    const styleElement = document.getElementById(classNames.styleId);
+    if (styleElement) styleElement.remove();
 }

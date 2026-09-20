@@ -17,141 +17,141 @@ const draftStateVersion = "3";
 
 const draftMap: Map<string, PoiItem> = new Map();
 const state = createDraftStateLoader(draftStateStorageKey, draftStateVersion, {
-  version: draftStateVersion,
-  filter: "all",
-  locationAttestedFilter: "all",
-  sortMode: "unsorted",
+    version: draftStateVersion,
+    filter: "all",
+    locationAttestedFilter: "all",
+    sortMode: "unsorted",
 });
 
 const draftsMod = createDraftsMod({ state, draftMap });
 const autoSaveMod = createAutoSaveMod({ autoSaveStorageKey, draftMap });
 const externalDraftUpdateMod = createExternalDraftUpdateMod({
-  storageKey: externalDraftUpdateStorageKey,
-  state,
-  draftMap,
-  applyDraftFilter: () => draftsMod.applyDraftFilter(),
-  sortDraftCards: (latitude, longitude, sortMode) =>
-    draftsMod.sortDraftCards(latitude, longitude, sortMode),
+    storageKey: externalDraftUpdateStorageKey,
+    state,
+    draftMap,
+    applyDraftFilter: () => draftsMod.applyDraftFilter(),
+    sortDraftCards: (latitude, longitude, sortMode) =>
+        draftsMod.sortDraftCards(latitude, longitude, sortMode),
 });
 
 let isActive = false;
 let draftStateApplyTimer: number | null = null;
 function scheduleDraftStateApply() {
-  if (!isActive) return;
-
-  if (draftStateApplyTimer !== null) {
-    window.clearTimeout(draftStateApplyTimer);
-  }
-
-  draftStateApplyTimer = window.setTimeout(() => {
-    draftStateApplyTimer = null;
-
     if (!isActive) return;
 
-    draftsMod.applyDraftFilter();
-    if (state.value.sortMode === "distance") {
-      if (
-        state.value.latitude === undefined ||
-        state.value.longitude === undefined
-      ) {
-        return;
-      }
-      draftsMod.sortDraftCards(
-        state.value.latitude,
-        state.value.longitude,
-        "distance",
-      );
-    } else if (state.value.sortMode === "last-modified") {
-      draftsMod.sortDraftCards(0, 0, "last-modified");
-    } else {
-      draftsMod.updateDraftCardBadges(0, 0, "unsorted");
+    if (draftStateApplyTimer !== null) {
+        window.clearTimeout(draftStateApplyTimer);
     }
 
-    autoSaveMod.addButtons();
-  }, 100);
+    draftStateApplyTimer = window.setTimeout(() => {
+        draftStateApplyTimer = null;
+
+        if (!isActive) return;
+
+        draftsMod.applyDraftFilter();
+        if (state.value.sortMode === "distance") {
+            if (
+                state.value.latitude === undefined ||
+                state.value.longitude === undefined
+            ) {
+                return;
+            }
+            draftsMod.sortDraftCards(
+                state.value.latitude,
+                state.value.longitude,
+                "distance",
+            );
+        } else if (state.value.sortMode === "last-modified") {
+            draftsMod.sortDraftCards(0, 0, "last-modified");
+        } else {
+            draftsMod.updateDraftCardBadges(0, 0, "unsorted");
+        }
+
+        autoSaveMod.addButtons();
+    }, 100);
 }
 
 function onDraftsReceived(data: DraftsResponse) {
-  if (data && data.result && Array.isArray(data.result.result)) {
-    data.result.result.forEach((item) => {
-      if (item.id) {
-        draftMap.set(item.id, item);
-      }
-    });
-    externalDraftUpdateMod.processDrafts();
-    scheduleDraftStateApply();
-    console.log("[Wayfarer Draft Sorter] Drafts loaded:", draftMap);
-  }
+    if (data && data.result && Array.isArray(data.result.result)) {
+        data.result.result.forEach((item) => {
+            if (item.id) {
+                draftMap.set(item.id, item);
+            }
+        });
+        externalDraftUpdateMod.processDrafts();
+        scheduleDraftStateApply();
+        console.log("[Wayfarer Draft Sorter] Drafts loaded:", draftMap);
+    }
 }
 const apiHook = hookApi({
-  onDraftsReceived,
-  isActive: isActive,
+    onDraftsReceived,
+    isActive: isActive,
 });
 
 let observer: MutationObserver | null = null;
 function start() {
-  if (isActive) return;
+    if (isActive) return;
 
-  isActive = true;
-  apiHook.setIsActive(isActive);
+    isActive = true;
+    apiHook.setIsActive(isActive);
 
-  injectStyles();
-  externalDraftUpdateMod.startOnDraftList();
-  draftsMod.addSortButton();
-  draftsMod.addSearchInput();
-  autoSaveMod.addButtons();
+    injectStyles();
+    externalDraftUpdateMod.startOnDraftList();
+    draftsMod.addSortButton();
+    draftsMod.addSearchInput();
+    autoSaveMod.addButtons();
 
-  if (!observer) {
-    observer = new MutationObserver(() => {
-      if (!isActive) return;
+    if (!observer) {
+        observer = new MutationObserver(() => {
+            if (!isActive) return;
 
-      injectStyles();
-      draftsMod.addSortButton();
-      draftsMod.addSearchInput();
-      autoSaveMod.addButtons();
-      scheduleDraftStateApply();
+            injectStyles();
+            draftsMod.addSortButton();
+            draftsMod.addSearchInput();
+            autoSaveMod.addButtons();
+            scheduleDraftStateApply();
+        });
+    }
+
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true,
     });
-  }
-
-  observer.observe(document.body, {
-    childList: true,
-    subtree: true,
-  });
 }
 
 function stop() {
-  if (!isActive) return;
+    if (!isActive) return;
 
-  isActive = false;
-  apiHook.setIsActive(isActive);
+    isActive = false;
+    apiHook.setIsActive(isActive);
 
-  if (observer) {
-    observer.disconnect();
-  }
+    if (observer) {
+        observer.disconnect();
+    }
 
-  if (draftStateApplyTimer !== null) {
-    clearTimeout(draftStateApplyTimer);
-    draftStateApplyTimer = null;
-  }
+    if (draftStateApplyTimer !== null) {
+        clearTimeout(draftStateApplyTimer);
+        draftStateApplyTimer = null;
+    }
 
-  autoSaveMod.stopWaitingForSaveButton();
+    autoSaveMod.stopWaitingForSaveButton();
 
-  draftMap.clear();
-  draftsMod.removeAddedUI();
-  removeStyles();
+    draftMap.clear();
+    draftsMod.removeAddedUI();
+    removeStyles();
 }
 
 startRouting({
-  [TARGET_PATH]: { start, stop },
-  [EDIT_PATH]: {
-    start() {
-      externalDraftUpdateMod.startOnEditPage();
-      autoSaveMod.startWaitingForSaveButton();
+    [TARGET_PATH]: { start, stop },
+    [EDIT_PATH]: {
+        start() {
+            externalDraftUpdateMod.startOnEditPage();
+            autoSaveMod.startWaitingForSaveButton();
+        },
     },
-  },
-  [DRAFT_SUCCESS_PATH]: {
-    start() {
-      autoSaveMod.handleDraftSuccessPage();
+    [DRAFT_SUCCESS_PATH]: {
+        start() {
+            autoSaveMod.handleDraftSuccessPage();
+        },
     },
-  },
 });

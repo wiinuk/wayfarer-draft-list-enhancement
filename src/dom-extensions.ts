@@ -1,24 +1,27 @@
 export function findField(
-  selectors: string[],
+    selectors: string[],
 ): HTMLInputElement | HTMLTextAreaElement | null {
-  for (const selector of selectors) {
-    const field = document.querySelector(selector);
-    if (
-      field instanceof HTMLInputElement ||
-      field instanceof HTMLTextAreaElement
-    ) {
-      return field;
+    for (const selector of selectors) {
+        const field = document.querySelector(selector);
+        if (
+            field instanceof HTMLInputElement ||
+            field instanceof HTMLTextAreaElement
+        ) {
+            return field;
+        }
     }
-  }
-  return null;
+    return null;
 }
 
 export function setFieldValue(
-  field: HTMLInputElement | HTMLTextAreaElement,
-  value: string,
+    field: HTMLInputElement | HTMLTextAreaElement,
+    value: string,
 ) {
-  const prototype = Object.getPrototypeOf(field) as { value: string };
-  Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(field, value);
-  field.dispatchEvent(new Event("input", { bubbles: true }));
-  field.dispatchEvent(new Event("change", { bubbles: true }));
+    const prototype = Object.getPrototypeOf(field) as { value: string };
+    Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(
+        field,
+        value,
+    );
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    field.dispatchEvent(new Event("change", { bubbles: true }));
 }

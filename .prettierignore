@@ -3,3 +3,5 @@ dev
 node_modules
 .private
 *.user.js
+package.json
+package-lock.json
