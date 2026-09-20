@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wayfarer Draft List Enhancement
 // @namespace    http://tampermonkey.net/
-// @version      1.9
+// @version      1.9.1
 // @description  Sort Niantic Wayfarer drafts using precise coordinates from API response
 // @match        https://wayfarer.scopely.com/*
 // @grant        none
@@ -30,7 +30,10 @@
           const data = await clone.json();
           onDraftsReceived2(data);
         } catch (e) {
-          console.error("[Wayfarer Draft Sorter] Error parsing API response:", e);
+          console.error(
+            "[Wayfarer Draft Sorter] Error parsing API response:",
+            e
+          );
         }
       }
       return response;
@@ -51,7 +54,10 @@
           const data = this.responseType === "json" ? this.response : JSON.parse(this.responseText);
           onDraftsReceived2(data);
         } catch (e) {
-          console.error("[Wayfarer Draft Sorter] Error parsing XHR response:", e);
+          console.error(
+            "[Wayfarer Draft Sorter] Error parsing XHR response:",
+            e
+          );
         }
       });
       return originalXhrSend.apply(this, args);
@@ -324,7 +330,9 @@
     if (!component) return false;
     const coordinate = { lat, lng };
     if (typeof component.onMapClick === "function") {
-      component.onMapClick(coordinate);
+      component.onMapClick(
+        coordinate
+      );
       return true;
     }
     if (typeof component._updateMapSelection === "function" && typeof component._applySelectedMarker === "function") {
@@ -444,7 +452,9 @@
       stopWaitingForSaveButton();
       const state2 = getAutoSaveState();
       if (!state2) {
-        console.log("[Wayfarer Draft Sorter] No auto-save operation pending.");
+        console.log(
+          "[Wayfarer Draft Sorter] No auto-save operation pending."
+        );
         return;
       }
       console.log("[Wayfarer Draft Sorter] Waiting for save button...");
@@ -615,7 +625,10 @@
           title.prepend(locationBadge);
         }
         const isAttested = Boolean(draft.locationAttested);
-        locationBadge.classList.toggle(classNames.locationAttested, isAttested);
+        locationBadge.classList.toggle(
+          classNames.locationAttested,
+          isAttested
+        );
         if (sortMode === "distance") {
           let distBadge = draftCard.querySelector(
             `.${classNames.distanceBadge}`
@@ -673,7 +686,8 @@
     }
     function getLocationAttestedFilterLabel() {
       if (state2.value.locationAttestedFilter === "attested") return "\u78BA\u8A8D\u6E08";
-      if (state2.value.locationAttestedFilter === "not-attested") return "\u672A\u78BA\u8A8D";
+      if (state2.value.locationAttestedFilter === "not-attested")
+        return "\u672A\u78BA\u8A8D";
       return "\u3059\u3079\u3066";
     }
     function getSortModeLabel() {
@@ -937,7 +951,10 @@
   }
   function setFieldValue(field, value) {
     const prototype = Object.getPrototypeOf(field);
-    Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(field, value);
+    Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(
+      field,
+      value
+    );
     field.dispatchEvent(new Event("input", { bubbles: true }));
     field.dispatchEvent(new Event("change", { bubbles: true }));
   }
@@ -963,9 +980,19 @@
       }
       return update;
     } catch (error) {
-      console.warn("[Wayfarer Draft Sorter] Could not parse update hash:", error);
+      console.warn(
+        "[Wayfarer Draft Sorter] Could not parse update hash:",
+        error
+      );
       return null;
     }
+  }
+  function removeSymbols(text) {
+    return text.replace(
+      // eslint-disable-next-line no-misleading-character-class
+      /[\u{3200}-\u{32FF}\u{1F000}-\u{1FFFF}\u{2100}-\u{2BFF}\u{FE00}-\u{FE0F}\u200D]/gu,
+      ""
+    );
   }
   function createExternalDraftUpdateMod({
     storageKey,
@@ -976,6 +1003,8 @@
   }) {
     let listProcessing = false;
     let draftClickStarted = false;
+    let draftListObserver = null;
+    let draftListPollTimer = null;
     let editObserver = null;
     let editPollTimer = null;
     function saveUpdate(update) {
@@ -1001,10 +1030,28 @@
     function clearUpdate() {
       sessionStorage.removeItem(storageKey);
     }
+    function stopWaitingForDraftList() {
+      draftListObserver?.disconnect();
+      draftListObserver = null;
+      if (draftListPollTimer !== null) {
+        window.clearInterval(draftListPollTimer);
+      }
+      draftListPollTimer = null;
+    }
+    function waitForDraftList() {
+      if (draftListObserver || draftListPollTimer !== null) return;
+      draftListObserver = new MutationObserver(processDrafts);
+      draftListObserver.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+      draftListPollTimer = window.setInterval(processDrafts, 250);
+    }
     function startOnDraftList() {
       if (listProcessing) return;
       const update = parseUpdateHash();
       if (!update) return;
+      stopWaitingForDraftList();
       listProcessing = true;
       saveUpdate(update);
       history.replaceState(
@@ -1040,9 +1087,20 @@
         }
         return [{ card, draft }];
       });
-      const exactMatches = update.title === void 0 ? [] : candidates.filter(({ draft }) => draft.title === update.title);
+      if (candidates.length === 0 && update.title !== void 0) {
+        waitForDraftList();
+        return;
+      }
+      const exactMatches = update.title === void 0 ? [] : candidates.filter(
+        ({ draft }) => update.title !== void 0 && draft.title === removeSymbols(update.title)
+      );
+      if (exactMatches.length !== 1 && update.title !== void 0) {
+        waitForDraftList();
+        return;
+      }
       if (exactMatches.length === 1 && !draftClickStarted) {
         draftClickStarted = true;
+        stopWaitingForDraftList();
         window.setTimeout(() => exactMatches[0].card.click(), 50);
       }
     }
@@ -1089,7 +1147,9 @@
             ]
           ]
         ];
-        const found = fields.filter(([key]) => update[key] !== void 0).map(([key, selectors]) => [key, findField(selectors)]);
+        const found = fields.filter(([key]) => update[key] !== void 0).map(
+          ([key, selectors]) => [key, findField(selectors)]
+        );
         if (found.some(([, field]) => !field || field.disabled)) return;
         found.forEach(
           ([key, field]) => setFieldValue(field, String(update[key]))
