@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wayfarer Draft List Enhancement
 // @namespace    http://tampermonkey.net/
-// @version      1.8
+// @version      1.9
 // @description  Sort Niantic Wayfarer drafts using precise coordinates from API response
 // @match        https://wayfarer.scopely.com/*
 // @grant        none
@@ -46,9 +46,7 @@
       this.addEventListener("load", () => {
         if (!isActive2) return;
         const url = xhrUrls.get(this);
-        if (!url || !url.includes(draftsPath)) {
-          return;
-        }
+        if (!url || !url.includes(draftsPath)) return;
         try {
           const data = this.responseType === "json" ? this.response : JSON.parse(this.responseText);
           onDraftsReceived2(data);
@@ -291,8 +289,55 @@
     }
     return void 0;
   }
+  function findSubmitMapComponent() {
+    const root = document.querySelector("app-submit-wayspot-map");
+    if (!root) return null;
+    const seen = /* @__PURE__ */ new WeakSet();
+    const visit = (value, depth) => {
+      if (!value || typeof value !== "object" && typeof value !== "function" || depth > 8) {
+        return null;
+      }
+      const object = value;
+      if (seen.has(object)) return null;
+      seen.add(object);
+      const locationSelected = object.locationSelected;
+      const hasLocationObservable = locationSelected && typeof locationSelected === "object" && typeof locationSelected.subscribe === "function";
+      if (hasLocationObservable && (typeof object.onMapClick === "function" || typeof object._updateMapSelection === "function" && typeof object._applySelectedMarker === "function")) {
+        return object;
+      }
+      for (const child of Object.values(object)) {
+        const result = visit(child, depth + 1);
+        if (result) return result;
+      }
+      return null;
+    };
+    const elements = [root, ...root.querySelectorAll("*")];
+    for (const element of elements) {
+      const context = element.__ngContext__;
+      const component = visit(context, 0);
+      if (component) return component;
+    }
+    return null;
+  }
+  function setCoordinate(lat, lng) {
+    const component = findSubmitMapComponent();
+    if (!component) return false;
+    const coordinate = { lat, lng };
+    if (typeof component.onMapClick === "function") {
+      component.onMapClick(coordinate);
+      return true;
+    }
+    if (typeof component._updateMapSelection === "function" && typeof component._applySelectedMarker === "function") {
+      component._updateMapSelection(
+        coordinate
+      );
+      component._applySelectedMarker();
+      return true;
+    }
+    return false;
+  }
 
-  // src/auto-save-mod.ts
+  // src/mods/auto-save-mod.ts
   function createAutoSaveMod({
     autoSaveStorageKey: autoSaveStorageKey2,
     draftMap: draftMap2
@@ -356,9 +401,7 @@
         if (!draftId) return;
         const draft = draftMap2.get(draftId);
         if (!draft) return;
-        if (draft.locationAttested) {
-          return;
-        }
+        if (draft.locationAttested) return;
         const title = card.querySelector(".submission-title");
         if (!title) return;
         const button = document.createElement("button");
@@ -412,9 +455,7 @@
           "button.save-draft-button"
         );
         if (!button) return;
-        if (button.disabled) {
-          return;
-        }
+        if (button.disabled) return;
         const style = window.getComputedStyle(button);
         if (style.display === "none" || style.visibility === "hidden") {
           return;
@@ -453,9 +494,7 @@
     }
     function handleDraftSuccessPage() {
       const state2 = getAutoSaveState();
-      if (!state2) {
-        return;
-      }
+      if (!state2) return;
       console.log(
         "[Wayfarer Draft Sorter] Draft saved successfully. Returning to draft list."
       );
@@ -518,7 +557,7 @@
     return { latitude, longitude };
   }
 
-  // src/draft-card-mod.ts
+  // src/mods/draft-card-mod.ts
   function formatDistance(distance) {
     return distance < 1 ? `${Math.round(distance * 1e3)} m` : `${distance.toFixed(2)} km`;
   }
@@ -849,7 +888,7 @@
     };
   }
 
-  // src/draft-state-storage.ts
+  // src/state.ts
   function createDraftStateLoader(key, version, defaultValue) {
     let state2;
     function load() {
@@ -886,6 +925,204 @@
     };
   }
 
+  // src/dom-extensions.ts
+  function findField(selectors) {
+    for (const selector of selectors) {
+      const field = document.querySelector(selector);
+      if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+        return field;
+      }
+    }
+    return null;
+  }
+  function setFieldValue(field, value) {
+    const prototype = Object.getPrototypeOf(field);
+    Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(field, value);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    field.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  // src/mods/external-update-mod.ts
+  var searchRadiusKm2 = 0.08;
+  function parseUpdateHash() {
+    const match = window.location.hash.match(/^#update=(.+)$/);
+    if (!match) return null;
+    try {
+      const value = JSON.parse(decodeURIComponent(match[1]));
+      if (!value || typeof value !== "object") return null;
+      const record = value;
+      const update = {};
+      for (const key of ["lat", "lng"]) {
+        const candidate = record[key];
+        if (typeof candidate === "number" && Number.isFinite(candidate)) {
+          update[key] = candidate;
+        }
+      }
+      for (const key of ["title", "description", "statement"]) {
+        if (typeof record[key] === "string") update[key] = record[key];
+      }
+      return update;
+    } catch (error) {
+      console.warn("[Wayfarer Draft Sorter] Could not parse update hash:", error);
+      return null;
+    }
+  }
+  function createExternalDraftUpdateMod({
+    storageKey,
+    state: state2,
+    draftMap: draftMap2,
+    applyDraftFilter,
+    sortDraftCards
+  }) {
+    let listProcessing = false;
+    let draftClickStarted = false;
+    let editObserver = null;
+    let editPollTimer = null;
+    function saveUpdate(update) {
+      try {
+        sessionStorage.setItem(storageKey, JSON.stringify(update));
+      } catch (error) {
+        console.warn(
+          "[Wayfarer Draft Sorter] Could not save external draft update:",
+          error
+        );
+      }
+    }
+    function loadUpdate() {
+      try {
+        const value = JSON.parse(
+          sessionStorage.getItem(storageKey) ?? "null"
+        );
+        return value && typeof value === "object" ? value : null;
+      } catch {
+        return null;
+      }
+    }
+    function clearUpdate() {
+      sessionStorage.removeItem(storageKey);
+    }
+    function startOnDraftList() {
+      if (listProcessing) return;
+      const update = parseUpdateHash();
+      if (!update) return;
+      listProcessing = true;
+      saveUpdate(update);
+      history.replaceState(
+        history.state,
+        "",
+        `${window.location.pathname}${window.location.search}`
+      );
+      if (update.lat === void 0 || update.lng === void 0) {
+        alert("\u66F4\u65B0\u5BFE\u8C61\u3092\u7279\u5B9A\u3059\u308B\u305F\u3081\u3001lat \u3068 lng \u304C\u5FC5\u8981\u3067\u3059\u3002");
+      }
+    }
+    function processDrafts() {
+      const update = loadUpdate();
+      if (!update || update.lat === void 0 || update.lng === void 0) {
+        return;
+      }
+      state2.mapSave((currentState) => ({
+        ...currentState,
+        query: `${update.lat}, ${update.lng}`,
+        sortMode: "distance",
+        latitude: update.lat,
+        longitude: update.lng
+      }));
+      applyDraftFilter();
+      sortDraftCards(update.lat, update.lng, "distance");
+      const candidates = Array.from(
+        document.querySelectorAll(".submission-card")
+      ).flatMap((card) => {
+        const draftId = getDraftIdForCard(card, draftMap2);
+        const draft = draftId ? draftMap2.get(draftId) : void 0;
+        if (!draft || getDistance(update.lat, update.lng, draft.lat, draft.lng) > searchRadiusKm2) {
+          return [];
+        }
+        return [{ card, draft }];
+      });
+      const exactMatches = update.title === void 0 ? [] : candidates.filter(({ draft }) => draft.title === update.title);
+      if (exactMatches.length === 1 && !draftClickStarted) {
+        draftClickStarted = true;
+        window.setTimeout(() => exactMatches[0].card.click(), 50);
+      }
+    }
+    function startOnEditPage() {
+      stopWaitingForFields();
+      const update = loadUpdate();
+      if (!update) return;
+      let completed = false;
+      let coordinateApplied = false;
+      const tryFillFields = () => {
+        if (completed) return;
+        const latitude = update.lat;
+        const longitude = update.lng;
+        const hasCoordinates = latitude !== void 0 && longitude !== void 0;
+        if (hasCoordinates && !coordinateApplied) {
+          if (!setCoordinate(latitude, longitude)) return;
+          coordinateApplied = true;
+        }
+        const fields = [
+          [
+            "title",
+            [
+              "textarea#title",
+              "input[formcontrolname=title]",
+              "input[name=title]",
+              "input[id=title]"
+            ]
+          ],
+          [
+            "description",
+            [
+              "textarea#description",
+              "textarea[formcontrolname=description]",
+              "textarea[name=description]"
+            ]
+          ],
+          [
+            "statement",
+            [
+              "textarea#supportingStatement",
+              "textarea[formcontrolname=supportingStatement]",
+              "textarea[formcontrolname=statement]",
+              "textarea[name=statement]"
+            ]
+          ]
+        ];
+        const found = fields.filter(([key]) => update[key] !== void 0).map(([key, selectors]) => [key, findField(selectors)]);
+        if (found.some(([, field]) => !field || field.disabled)) return;
+        found.forEach(
+          ([key, field]) => setFieldValue(field, String(update[key]))
+        );
+        completed = true;
+        clearUpdate();
+        stopWaitingForFields();
+      };
+      tryFillFields();
+      if (completed) return;
+      editObserver = new MutationObserver(tryFillFields);
+      editObserver.observe(document.body, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["disabled"]
+      });
+      editPollTimer = window.setInterval(tryFillFields, 250);
+    }
+    function stopWaitingForFields() {
+      editObserver?.disconnect();
+      editObserver = null;
+      if (editPollTimer !== null) window.clearInterval(editPollTimer);
+      editPollTimer = null;
+    }
+    return {
+      startOnDraftList,
+      processDrafts,
+      startOnEditPage,
+      stopWaitingForFields
+    };
+  }
+
   // src/routing.ts
   function startRouting(definition) {
     let previousLifecycle;
@@ -917,6 +1154,7 @@
   var EDIT_PATH = "/new/submit/new";
   var DRAFT_SUCCESS_PATH = "/new/submit/draft-success";
   var autoSaveStorageKey = "wayfarer-draft-auto-save";
+  var externalDraftUpdateStorageKey = "wayfarer-external-draft-update";
   var draftStateStorageKey = "wayfarer-draft-list-state";
   var draftStateVersion = "3";
   var draftMap = /* @__PURE__ */ new Map();
@@ -928,6 +1166,13 @@
   });
   var draftsMod = createDraftsMod({ state, draftMap });
   var autoSaveMod = createAutoSaveMod({ autoSaveStorageKey, draftMap });
+  var externalDraftUpdateMod = createExternalDraftUpdateMod({
+    storageKey: externalDraftUpdateStorageKey,
+    state,
+    draftMap,
+    applyDraftFilter: () => draftsMod.applyDraftFilter(),
+    sortDraftCards: (latitude, longitude, sortMode) => draftsMod.sortDraftCards(latitude, longitude, sortMode)
+  });
   var isActive = false;
   var draftStateApplyTimer = null;
   function scheduleDraftStateApply() {
@@ -963,6 +1208,7 @@
           draftMap.set(item.id, item);
         }
       });
+      externalDraftUpdateMod.processDrafts();
       scheduleDraftStateApply();
       console.log("[Wayfarer Draft Sorter] Drafts loaded:", draftMap);
     }
@@ -977,6 +1223,7 @@
     isActive = true;
     apiHook.setIsActive(isActive);
     injectStyles();
+    externalDraftUpdateMod.startOnDraftList();
     draftsMod.addSortButton();
     draftsMod.addSearchInput();
     autoSaveMod.addButtons();
@@ -1015,6 +1262,7 @@
     [TARGET_PATH]: { start, stop },
     [EDIT_PATH]: {
       start() {
+        externalDraftUpdateMod.startOnEditPage();
         autoSaveMod.startWaitingForSaveButton();
       }
     },
