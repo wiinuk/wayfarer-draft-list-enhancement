@@ -1,6 +1,6 @@
 import { hookApi } from "./api-hook";
-import { createAutoSaveMod } from "./auto-save-mod";
-import { createDraftsMod } from "./draft-card-mod";
+import { createAutoSaveMod } from "./mods/auto-save-mod";
+import { createDraftsMod } from "./mods/draft-card-mod";
 import { createDraftStateLoader } from "./state";
 import { DraftsResponse, PoiItem } from "./drafts-model";
 import { injectStyles, removeStyles } from "./global-styles";

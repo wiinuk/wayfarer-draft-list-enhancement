@@ -1,6 +1,6 @@
-import { PoiItem } from "./drafts-model";
-import { classNames } from "./global-styles";
-import { getDraftIdForCard } from "./ng-context";
+import { PoiItem } from "../drafts-model";
+import { classNames } from "../global-styles";
+import { getDraftIdForCard } from "../ng-context";
 
 type AutoSaveState = {
   draftId: string;

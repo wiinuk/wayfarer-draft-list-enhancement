@@ -1,8 +1,8 @@
-import { DraftState } from "./state";
-import { PoiItem } from "./drafts-model";
-import { getDistance, parseCoordinate } from "./geometry";
-import { classNames } from "./global-styles";
-import { getDraftIdForCard } from "./ng-context";
+import { DraftState } from "../state";
+import { PoiItem } from "../drafts-model";
+import { getDistance, parseCoordinate } from "../geometry";
+import { classNames } from "../global-styles";
+import { getDraftIdForCard } from "../ng-context";
 
 function formatDistance(distance: number) {
   return distance < 1
