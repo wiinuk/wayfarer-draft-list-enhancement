@@ -164,6 +164,24 @@ export function createExternalDraftUpdateMod({
         editPollTimer = null;
     }
 
+    function showDraftList(): boolean {
+        const draftTabs = Array.from(document.querySelectorAll("nav")).find(
+            (navigation) =>
+                navigation.querySelectorAll<HTMLButtonElement>(
+                    ":scope > button[aria-pressed]",
+                ).length === 2,
+        );
+        const buttons = draftTabs?.querySelectorAll<HTMLButtonElement>(
+            ":scope > button[aria-pressed]",
+        );
+        const draftTab = buttons?.[1];
+        if (!draftTab) return false;
+        if (draftTab.getAttribute("aria-pressed") !== "true") {
+            draftTab.click();
+        }
+        return true;
+    }
+
     function stop() {
         stopWaitingForDraftList();
         stopWaitingForFields();
@@ -213,6 +231,10 @@ export function createExternalDraftUpdateMod({
     function processDrafts() {
         const update = loadUpdate();
         if (!update) return;
+        if (!showDraftList()) {
+            waitForDraftList();
+            return;
+        }
         const latitude = update.lat;
         const longitude = update.lng;
         const title = update.title;
