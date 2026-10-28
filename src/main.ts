@@ -1,6 +1,4 @@
 import { hookApi } from "./api-hook";
-import { createAutoSaveMod } from "./mods/auto-save-mod";
-import { createDraftsMod } from "./mods/draft-card-mod";
 import { createDraftStateLoader } from "./state";
 import { DraftsResponse, PoiItem } from "./drafts-model";
 import { createExternalDraftUpdateMod } from "./mods/external-update-mod";
@@ -9,8 +7,6 @@ import { startRouting } from "./routing";
 
 const TARGET_PATH = "/submit";
 const EDIT_PATH = "/submit/new";
-const DRAFT_SUCCESS_PATH = "/new/submit/draft-success";
-const autoSaveStorageKey = "wayfarer-draft-auto-save";
 const externalDraftUpdateStorageKey = "wayfarer-external-draft-update";
 const draftStateStorageKey = "wayfarer-draft-list-state";
 const draftStateVersion = "3";
@@ -23,53 +19,13 @@ const state = createDraftStateLoader(draftStateStorageKey, draftStateVersion, {
     sortMode: "unsorted",
 });
 
-const draftsMod = createDraftsMod({ state, draftMap });
-const autoSaveMod = createAutoSaveMod({ autoSaveStorageKey, draftMap });
 const externalDraftUpdateMod = createExternalDraftUpdateMod({
     storageKey: externalDraftUpdateStorageKey,
     state,
     draftMap,
-    applyDraftFilter: () => draftsMod.applyDraftFilter(),
-    sortDraftCards: (latitude, longitude, sortMode) =>
-        draftsMod.sortDraftCards(latitude, longitude, sortMode),
 });
 
 let isActive = false;
-let draftStateApplyTimer: number | null = null;
-function scheduleDraftStateApply() {
-    if (!isActive) return;
-
-    if (draftStateApplyTimer !== null) {
-        window.clearTimeout(draftStateApplyTimer);
-    }
-
-    draftStateApplyTimer = window.setTimeout(() => {
-        draftStateApplyTimer = null;
-
-        if (!isActive) return;
-
-        draftsMod.applyDraftFilter();
-        if (state.value.sortMode === "distance") {
-            if (
-                state.value.latitude === undefined ||
-                state.value.longitude === undefined
-            ) {
-                return;
-            }
-            draftsMod.sortDraftCards(
-                state.value.latitude,
-                state.value.longitude,
-                "distance",
-            );
-        } else if (state.value.sortMode === "last-modified") {
-            draftsMod.sortDraftCards(0, 0, "last-modified");
-        } else {
-            draftsMod.updateDraftCardBadges(0, 0, "unsorted");
-        }
-
-        autoSaveMod.addButtons();
-    }, 100);
-}
 
 function onDraftsReceived(data: DraftsResponse) {
     if (data && data.result && Array.isArray(data.result.result)) {
@@ -79,8 +35,6 @@ function onDraftsReceived(data: DraftsResponse) {
             }
         });
         externalDraftUpdateMod.processDrafts();
-        scheduleDraftStateApply();
-        console.log("[Wayfarer Draft Sorter] Drafts loaded:", draftMap);
     }
 }
 const apiHook = hookApi({
@@ -97,19 +51,12 @@ function start() {
 
     injectStyles();
     externalDraftUpdateMod.startOnDraftList();
-    draftsMod.addSortButton();
-    draftsMod.addSearchInput();
-    autoSaveMod.addButtons();
 
     if (!observer) {
         observer = new MutationObserver(() => {
             if (!isActive) return;
 
             injectStyles();
-            draftsMod.addSortButton();
-            draftsMod.addSearchInput();
-            autoSaveMod.addButtons();
-            scheduleDraftStateApply();
         });
     }
 
@@ -129,15 +76,7 @@ function stop() {
         observer.disconnect();
     }
 
-    if (draftStateApplyTimer !== null) {
-        clearTimeout(draftStateApplyTimer);
-        draftStateApplyTimer = null;
-    }
-
-    autoSaveMod.stopWaitingForSaveButton();
-
     draftMap.clear();
-    draftsMod.removeAddedUI();
     removeStyles();
 }
 
@@ -146,12 +85,6 @@ startRouting({
     [EDIT_PATH]: {
         start() {
             externalDraftUpdateMod.startOnEditPage();
-            autoSaveMod.startWaitingForSaveButton();
-        },
-    },
-    [DRAFT_SUCCESS_PATH]: {
-        start() {
-            autoSaveMod.handleDraftSuccessPage();
         },
     },
 });

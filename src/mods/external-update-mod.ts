@@ -17,12 +17,6 @@ interface CreateExternalDraftUpdateOptions {
     readonly storageKey: string;
     readonly state: DraftState;
     readonly draftMap: ReadonlyMap<string, PoiItem>;
-    readonly applyDraftFilter: () => void;
-    readonly sortDraftCards: (
-        latitude: number,
-        longitude: number,
-        sortMode: "distance" | "last-modified",
-    ) => boolean;
 }
 
 const searchRadiusKm = 0.08;
@@ -68,8 +62,6 @@ export function createExternalDraftUpdateMod({
     storageKey,
     state,
     draftMap,
-    applyDraftFilter,
-    sortDraftCards,
 }: CreateExternalDraftUpdateOptions) {
     let listProcessing = false;
     let draftClickStarted = false;
@@ -157,8 +149,6 @@ export function createExternalDraftUpdateMod({
             latitude: update.lat,
             longitude: update.lng,
         }));
-        applyDraftFilter();
-        sortDraftCards(update.lat, update.lng, "distance");
 
         const candidates = Array.from(
             document.querySelectorAll(".submission-card"),
