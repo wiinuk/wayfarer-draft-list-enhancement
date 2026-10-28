@@ -7,8 +7,8 @@ import { createExternalDraftUpdateMod } from "./mods/external-update-mod";
 import { injectStyles, removeStyles } from "./global-styles";
 import { startRouting } from "./routing";
 
-const TARGET_PATH = "/new/submit";
-const EDIT_PATH = "/new/submit/new";
+const TARGET_PATH = "/submit";
+const EDIT_PATH = "/submit/new";
 const DRAFT_SUCCESS_PATH = "/new/submit/draft-success";
 const autoSaveStorageKey = "wayfarer-draft-auto-save";
 const externalDraftUpdateStorageKey = "wayfarer-external-draft-update";
