@@ -275,7 +275,10 @@ export function createExternalDraftUpdateMod({
         stopWaitingForDraftList();
 
         window.setTimeout(() => {
-            const button = exactMatches[0].card.querySelector("button");
+            const button =
+                exactMatches[0].card.querySelector<HTMLButtonElement>(
+                    'button:not([role="checkbox"]):not([aria-haspopup="menu"])',
+                );
             if (button?.isConnected) {
                 button.click();
                 return;
