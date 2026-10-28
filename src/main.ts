@@ -71,6 +71,7 @@ function stop() {
 
     isActive = false;
     apiHook.setIsActive(isActive);
+    externalDraftUpdateMod.stop();
 
     if (observer) {
         observer.disconnect();
@@ -85,6 +86,9 @@ startRouting({
     [EDIT_PATH]: {
         start() {
             externalDraftUpdateMod.startOnEditPage();
+        },
+        stop() {
+            externalDraftUpdateMod.stop();
         },
     },
 });
