@@ -1,0 +1,16 @@
+node_modules/
+dist/
+dev/
+.vite/
+*.local
+
+# Editor files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Logs and OS files
+npm-debug.log*
+*.log
+.DS_Store
+Thumbs.db

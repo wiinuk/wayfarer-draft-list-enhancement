@@ -1,0 +1,22 @@
+{
+  "name": "@wiinuk/create-userscript",
+  "version": "1.0.0",
+  "description": "Scaffold a TypeScript and Vite development environment for a UserScript",
+  "type": "module",
+  "bin": {
+    "create-userscript": "./bin/create.js"
+  },
+  "files": ["bin/", "template/", "README.md"],
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wiinuk/wayfarer-draft-list-enhancement.git",
+    "directory": "generator"
+  },
+  "license": "ISC"
+}
