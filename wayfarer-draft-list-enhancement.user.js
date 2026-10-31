@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Wayfarer Draft List Enhancement
 // @namespace    http://tampermonkey.net/
-// @version      1.10.0
+// @version      1.10.1
 // @description  Sort Niantic Wayfarer drafts using precise coordinates from API response
 // @match        https://wayfarer.scopely.com/*
 // @grant        none
@@ -161,6 +161,42 @@
     return draftValue.id;
   }
 
+  // src/global-styles.ts
+  var classNamePrefix = "wf";
+  var classNames = Object.freeze({
+    styleId: `${classNamePrefix}-enhancement-styles`,
+    externalUpdateFilteredDraft: `${classNamePrefix}-external-update-filtered-draft`,
+    externalUpdateNotice: `${classNamePrefix}-external-update-notice`
+  });
+  var globalStyles = `
+        .${classNames.externalUpdateFilteredDraft} {
+            display: none !important;
+        }
+
+        .${classNames.externalUpdateNotice} {
+            box-sizing: border-box;
+            flex: 0 0 100%;
+            grid-column: 1 / -1;
+            padding: 12px 16px;
+            color: #664d03;
+            background: #fff3cd;
+            border: 1px solid #ffecb5;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+    `;
+  function injectStyles() {
+    if (document.getElementById(classNames.styleId)) return;
+    const styleElement = document.createElement("style");
+    styleElement.id = classNames.styleId;
+    styleElement.textContent = globalStyles;
+    (document.head || document.documentElement).appendChild(styleElement);
+  }
+  function removeStyles() {
+    const styleElement = document.getElementById(classNames.styleId);
+    if (styleElement) styleElement.remove();
+  }
+
   // src/mods/external-update-mod.ts
   var searchRadiusKm = 0.08;
   function isValidUpdate(value) {
@@ -274,6 +310,35 @@
       if (editPollTimer !== null) window.clearInterval(editPollTimer);
       editPollTimer = null;
     }
+    function clearManualSelectionUI() {
+      document.querySelectorAll(`.${classNames.externalUpdateFilteredDraft}`).forEach(
+        (card) => card.classList.remove(classNames.externalUpdateFilteredDraft)
+      );
+      document.getElementById(classNames.externalUpdateNotice)?.remove();
+    }
+    function showManualSelectionUI(cards, candidateIds) {
+      cards.forEach((cardElement) => {
+        const id = getDraftIdForCard(cardElement);
+        cardElement.classList.toggle(
+          classNames.externalUpdateFilteredDraft,
+          id === void 0 || !candidateIds.has(id)
+        );
+      });
+      const firstCard = cards[0];
+      if (!firstCard?.parentElement) return;
+      let notice = document.getElementById(classNames.externalUpdateNotice);
+      if (!notice) {
+        notice = document.createElement("div");
+        notice.id = classNames.externalUpdateNotice;
+        notice.className = classNames.externalUpdateNotice;
+        notice.setAttribute("role", "status");
+        notice.setAttribute("aria-live", "polite");
+        notice.textContent = "\u66F4\u65B0\u3059\u308B\u4E0B\u66F8\u304D\u3092\u9078\u629E\u3057\u3066\u304F\u3060\u3055\u3044\uFF08URL\u306E\u5EA7\u6A19\u304B\u308980m\u4EE5\u5185\u306E\u307F\u8868\u793A\u3057\u3066\u3044\u307E\u3059\uFF09\u3002";
+      }
+      if (notice.parentElement !== firstCard.parentElement) {
+        firstCard.parentElement.insertBefore(notice, firstCard);
+      }
+    }
     function showDraftList() {
       const draftTabs = Array.from(document.querySelectorAll("nav")).find(
         (navigation) => navigation.querySelectorAll(
@@ -293,6 +358,7 @@
     function stop2() {
       stopWaitingForDraftList();
       stopWaitingForFields();
+      clearManualSelectionUI();
     }
     function waitForDraftList() {
       if (draftListObserver || draftListPollTimer !== null) return;
@@ -309,6 +375,7 @@
       const update = parseUpdateHash();
       if (!update) return;
       stopWaitingForDraftList();
+      clearManualSelectionUI();
       draftClickStarted = false;
       saveUpdate(update);
       history.replaceState(
@@ -331,7 +398,10 @@
     }
     function processDrafts() {
       const update = loadUpdate();
-      if (!update) return;
+      if (!update) {
+        clearManualSelectionUI();
+        return;
+      }
       if (!showDraftList()) {
         waitForDraftList();
         return;
@@ -339,11 +409,16 @@
       const latitude = update.lat;
       const longitude = update.lng;
       const title = update.title;
-      if (latitude === void 0 || longitude === void 0 || title === void 0)
+      if (latitude === void 0 || longitude === void 0) {
+        clearManualSelectionUI();
         return;
-      const candidates = Array.from(
-        document.querySelectorAll('[data-testid="draft-card"]')
-      ).flatMap((cardElement) => {
+      }
+      const cards = Array.from(
+        document.querySelectorAll(
+          '[data-testid="draft-card"]'
+        )
+      );
+      const candidates = Array.from(cards).flatMap((cardElement) => {
         const card = getDraftCard(cardElement);
         const draft = card ? draftMap2.get(card.id) : void 0;
         if (!card || !draft || getDistance(latitude, longitude, draft.lat, draft.lng) > searchRadiusKm) {
@@ -351,13 +426,20 @@
         }
         return [{ ...card, draft }];
       });
-      const exactMatches = candidates.filter(
+      const exactMatches = title === void 0 ? [] : candidates.filter(
         ({ draft }) => draft.title === removeSymbols(title)
       );
       if (exactMatches.length !== 1) {
+        if (cards.length > 0) {
+          showManualSelectionUI(
+            cards,
+            new Set(candidates.map(({ id }) => id))
+          );
+        }
         waitForDraftList();
         return;
       }
+      clearManualSelectionUI();
       if (draftClickStarted) return;
       draftClickStarted = true;
       stopWaitingForDraftList();
@@ -376,6 +458,7 @@
     function startOnEditPage() {
       stopWaitingForFields();
       stopWaitingForDraftList();
+      clearManualSelectionUI();
       const update = loadUpdate();
       if (!update) return;
       let completed = false;
@@ -423,156 +506,6 @@
       stopWaitingForFields,
       stop: stop2
     };
-  }
-
-  // src/global-styles.ts
-  var classNamePrefix = "wf";
-  var classNames = Object.freeze({
-    styleId: `${classNamePrefix}-enhancement-styles`,
-    btn: `${classNamePrefix}-btn`,
-    btnSort: `${classNamePrefix}-btn-sort`,
-    btnFilter: `${classNamePrefix}-btn-filter`,
-    btnLocation: `${classNamePrefix}-btn-location`,
-    btnAutoSave: `${classNamePrefix}-btn-auto-save`,
-    btnAutoSaveProcessing: `${classNamePrefix}-btn-auto-save-processing`,
-    searchContainer: `${classNamePrefix}-search-container`,
-    searchInput: `${classNamePrefix}-search-input`,
-    searchClear: `${classNamePrefix}-search-clear`,
-    locationBadge: `${classNamePrefix}-location-attested-badge`,
-    locationAttested: `${classNamePrefix}-location-attested`,
-    distanceBadge: `${classNamePrefix}-distance-badge`
-  });
-  var globalStyles = `
-        /* \u30BD\u30FC\u30C8\u30FB\u30D5\u30A3\u30EB\u30BF\u30FC\u30DC\u30BF\u30F3\u306E\u57FA\u672C\u30B9\u30BF\u30A4\u30EB */
-        .${classNames.btn} {
-            margin-left: 8px;
-            padding: 6px 12px;
-            cursor: pointer;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-size: 14px;
-            font-weight: bold;
-        }
-
-        .${classNames.btnSort} {
-            margin-left: 15px;
-            background-color: #f53d00;
-        }
-
-        .${classNames.btnFilter} {
-            background-color: #1976d2;
-        }
-
-        .${classNames.btnLocation} {
-            background-color: #388e3c;
-        }
-
-        .${classNames.searchContainer} {
-            position: relative;
-            display: inline-block;
-            margin-left: 8px;
-            width: stretch;
-            vertical-align: middle;
-        }
-
-        .${classNames.searchInput} {
-            box-sizing: border-box;
-            padding: 5px 32px 5px 8px;
-            width: 100%;
-            border: 1px solid #c7c7c7;
-            border-radius: 4px;
-            font-size: 14px;
-            font-weight: normal;
-        }
-
-        .${classNames.searchClear} {
-            position: absolute;
-            top: 50%;
-            right: 6px;
-            display: none;
-            padding: 0;
-            width: 20px;
-            height: 20px;
-            transform: translateY(-50%);
-            cursor: pointer;
-            color: #666;
-            background: transparent;
-            border: 0;
-            font-size: 18px;
-            line-height: 20px;
-        }
-
-        .${classNames.searchClear}:hover {
-            color: #111;
-        }
-
-        /* \u4F4D\u7F6E\u8A8D\u8A3C\u30DC\u30BF\u30F3 */
-        .${classNames.btnAutoSave} {
-            margin-left: 10px;
-            padding: 5px 10px;
-            cursor: pointer;
-            color: white;
-            background-color: #7b1fa2;
-            border: none;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: bold;
-        }
-
-        .${classNames.btnAutoSave}:hover {
-            background-color: #6a1b9a;
-        }
-
-        .${classNames.btnAutoSaveProcessing} {
-            opacity: 0.7;
-            cursor: wait;
-        }
-
-        /* \u30AB\u30FC\u30C9\u5185\u30D0\u30C3\u30B8\u306E\u30B9\u30BF\u30A4\u30EB */
-        .${classNames.locationBadge} {
-            display: none;
-            align-items: center;
-            justify-content: center;
-            margin-left: 8px;
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            background: #2e7d32;
-            color: white;
-            font-size: 12px;
-            font-weight: bold;
-            vertical-align: middle;
-        }
-
-        .${classNames.locationBadge}.${classNames.locationAttested} {
-            display: inline-flex;
-        }
-
-        .${classNames.locationBadge}.${classNames.locationAttested}::before {
-            content: "\u2713";
-        }
-
-        .${classNames.distanceBadge} {
-            margin-left: 8px;
-            font-size: 12px;
-            color: #f53d00;
-            font-weight: bold;
-            background: #ffebeb;
-            padding: 2px 6px;
-            border-radius: 4px;
-        }
-    `;
-  function injectStyles() {
-    if (document.getElementById(classNames.styleId)) return;
-    const styleElement = document.createElement("style");
-    styleElement.id = classNames.styleId;
-    styleElement.textContent = globalStyles;
-    (document.head || document.documentElement).appendChild(styleElement);
-  }
-  function removeStyles() {
-    const styleElement = document.getElementById(classNames.styleId);
-    if (styleElement) styleElement.remove();
   }
 
   // src/routing.ts
