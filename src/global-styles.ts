@@ -13,6 +13,8 @@ export const classNames = Object.freeze({
     locationBadge: `${classNamePrefix}-location-attested-badge`,
     locationAttested: `${classNamePrefix}-location-attested`,
     distanceBadge: `${classNamePrefix}-distance-badge`,
+    externalUpdateFilteredDraft: `${classNamePrefix}-external-update-filtered-draft`,
+    externalUpdateNotice: `${classNamePrefix}-external-update-notice`,
 });
 
 const globalStyles = `
@@ -134,6 +136,22 @@ const globalStyles = `
             background: #ffebeb;
             padding: 2px 6px;
             border-radius: 4px;
+        }
+
+        .${classNames.externalUpdateFilteredDraft} {
+            display: none !important;
+        }
+
+        .${classNames.externalUpdateNotice} {
+            box-sizing: border-box;
+            flex: 0 0 100%;
+            grid-column: 1 / -1;
+            padding: 12px 16px;
+            color: #664d03;
+            background: #fff3cd;
+            border: 1px solid #ffecb5;
+            border-radius: 4px;
+            font-size: 14px;
         }
     `;
 

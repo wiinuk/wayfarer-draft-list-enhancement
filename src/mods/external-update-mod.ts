@@ -4,6 +4,7 @@ import { PoiItem } from "../drafts-model";
 import { getDistance } from "../geometry";
 import { getDraftIdForCard, getReactProp } from "../react-props";
 import { findField, setFieldValue, isRecord } from "../dom-extensions";
+import { classNames } from "../global-styles";
 
 type ExternalDraftUpdate = {
     lat?: number;
@@ -164,6 +165,46 @@ export function createExternalDraftUpdateMod({
         editPollTimer = null;
     }
 
+    function clearManualSelectionUI() {
+        document
+            .querySelectorAll(`.${classNames.externalUpdateFilteredDraft}`)
+            .forEach((card) =>
+                card.classList.remove(classNames.externalUpdateFilteredDraft),
+            );
+        document.getElementById(classNames.externalUpdateNotice)?.remove();
+    }
+
+    function showManualSelectionUI(
+        cards: readonly HTMLElement[],
+        candidateIds: ReadonlySet<string>,
+    ) {
+        cards.forEach((cardElement) => {
+            const id = getDraftIdForCard(cardElement);
+            cardElement.classList.toggle(
+                classNames.externalUpdateFilteredDraft,
+                id === undefined || !candidateIds.has(id),
+            );
+        });
+
+        const firstCard = cards[0];
+        if (!firstCard?.parentElement) return;
+
+        let notice = document.getElementById(classNames.externalUpdateNotice);
+        if (!notice) {
+            notice = document.createElement("div");
+            notice.id = classNames.externalUpdateNotice;
+            notice.className = classNames.externalUpdateNotice;
+            notice.setAttribute("role", "status");
+            notice.setAttribute("aria-live", "polite");
+            notice.textContent =
+                "更新する下書きを選択してください（URLの座標から80m以内のみ表示しています）。";
+        }
+
+        if (notice.parentElement !== firstCard.parentElement) {
+            firstCard.parentElement.insertBefore(notice, firstCard);
+        }
+    }
+
     function showDraftList(): boolean {
         const draftTabs = Array.from(document.querySelectorAll("nav")).find(
             (navigation) =>
@@ -185,6 +226,7 @@ export function createExternalDraftUpdateMod({
     function stop() {
         stopWaitingForDraftList();
         stopWaitingForFields();
+        clearManualSelectionUI();
     }
 
     function waitForDraftList() {
@@ -205,6 +247,7 @@ export function createExternalDraftUpdateMod({
         if (!update) return;
 
         stopWaitingForDraftList();
+        clearManualSelectionUI();
         draftClickStarted = false;
         saveUpdate(update);
         history.replaceState(
@@ -230,7 +273,10 @@ export function createExternalDraftUpdateMod({
 
     function processDrafts() {
         const update = loadUpdate();
-        if (!update) return;
+        if (!update) {
+            clearManualSelectionUI();
+            return;
+        }
         if (!showDraftList()) {
             waitForDraftList();
             return;
@@ -238,16 +284,17 @@ export function createExternalDraftUpdateMod({
         const latitude = update.lat;
         const longitude = update.lng;
         const title = update.title;
-        if (
-            latitude === undefined ||
-            longitude === undefined ||
-            title === undefined
-        )
+        if (latitude === undefined || longitude === undefined) {
+            clearManualSelectionUI();
             return;
+        }
 
-        const candidates = Array.from(
-            document.querySelectorAll('[data-testid="draft-card"]'),
-        ).flatMap((cardElement) => {
+        const cards = Array.from(
+            document.querySelectorAll<HTMLElement>(
+                '[data-testid="draft-card"]',
+            ),
+        );
+        const candidates = Array.from(cards).flatMap((cardElement) => {
             const card = getDraftCard(cardElement);
             const draft = card ? draftMap.get(card.id) : undefined;
             if (
@@ -261,15 +308,25 @@ export function createExternalDraftUpdateMod({
             return [{ ...card, draft }];
         });
 
-        const exactMatches = candidates.filter(
-            ({ draft }) => draft.title === removeSymbols(title),
-        );
+        const exactMatches =
+            title === undefined
+                ? []
+                : candidates.filter(
+                      ({ draft }) => draft.title === removeSymbols(title),
+                  );
 
         if (exactMatches.length !== 1) {
+            if (cards.length > 0) {
+                showManualSelectionUI(
+                    cards,
+                    new Set(candidates.map(({ id }) => id)),
+                );
+            }
             waitForDraftList();
             return;
         }
 
+        clearManualSelectionUI();
         if (draftClickStarted) return;
         draftClickStarted = true;
         stopWaitingForDraftList();
@@ -292,6 +349,7 @@ export function createExternalDraftUpdateMod({
     function startOnEditPage() {
         stopWaitingForFields();
         stopWaitingForDraftList();
+        clearManualSelectionUI();
         const update = loadUpdate();
         if (!update) return;
 
